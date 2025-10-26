@@ -132,6 +132,16 @@
     owner: ansible
     group: ansible
 
+- name: Ensure environment variables point to venv collections
+  ansible.builtin.lineinfile:
+    path: /home/ansible/.bashrc
+    regexp: '^export ANSIBLE_COLLECTIONS_PATHS='
+    line: 'export ANSIBLE_COLLECTIONS_PATHS=/home/ansible/kolla-venv/collections:/usr/share/ansible/collections'
+    insertafter: EOF
+    owner: ansible
+    group: ansible
+    mode: '0644'
+
 - name: Install openstack.kolla collection
   ansible.builtin.command:
     cmd: >
