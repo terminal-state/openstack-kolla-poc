@@ -1,0 +1,1 @@
+*.retry\n*.log\n*.swp\n__pycache__/
