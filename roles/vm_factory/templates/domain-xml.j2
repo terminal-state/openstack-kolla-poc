@@ -1,0 +1,60 @@
+<domain type='kvm'>
+  <name>{{ vm_here.name }}</name>
+  <memory unit='MiB'>{{ mem_mib }}</memory>
+  <vcpu placement='static'>{{ vm_here.vcpus }}</vcpu>
+  <os>
+    <type arch='x86_64'>hvm</type>
+    <boot dev='hd'/>
+    <boot dev='cdrom'/>
+  </os>
+  <cpu mode='{{ cpu_mode }}'/>
+  <features><acpi/><apic/><pae/></features>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+
+  <devices>
+    <!-- Root disk -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='{{ vm_root_path }}'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+
+    <!-- Additional data disks -->
+    {% set letter_index = 1 %}
+    {% for d in vm_extra_disks %}
+    {% set dev_letter = 'vd' ~ ('abcdefghijklmnopqrstuvwxyz'[letter_index]) %}
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='/var/lib/libvirt/images/{{ vm_here.name }}-{{ d.name }}.qcow2'/>
+      <target dev='{{ dev_letter }}' bus='virtio'/>
+    </disk>
+    {% set letter_index = letter_index + 1 %}
+    {% endfor %}
+
+    <!-- Cloud-init ISO -->
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ vm_iso_path }}'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+    </disk>
+
+    <!-- Network interfaces -->
+    {% for netname in vm_networks %}
+    <interface type='network'>
+      <source network='{{ netname }}'/>
+      {% set iface = vm_here.nets[loop.index0] %}
+      {% if iface.mac is defined %}<mac address='{{ iface.mac }}'/>{% endif %}
+      <model type='virtio'/>
+    </interface>
+    {% endfor %}
+
+    <graphics type='vnc' autoport='yes' listen='127.0.0.1'/>
+    <console type='pty'/>
+    <input type='tablet' bus='usb'/>
+    <video><model type='virtio'/></video>
+  </devices>
+</domain>

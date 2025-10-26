@@ -1,0 +1,39 @@
+---
+- name: List networks
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/openstack network list --format json
+  environment: "{{ openstack_env }}"
+  register: networks_list
+  changed_when: false
+
+- name: Parse networks
+  ansible.builtin.set_fact:
+    networks: "{{ networks_list.stdout | from_json }}"
+
+- name: Verify external network exists
+  ansible.builtin.assert:
+    that:
+      - networks | selectattr('Name', 'equalto', 'external') | list | length == 1
+    fail_msg: "External network not found"
+    success_msg: "External network configured"
+
+- name: Verify internal network exists
+  ansible.builtin.assert:
+    that:
+      - networks | selectattr('Name', 'equalto', 'internal') | list | length == 1
+    fail_msg: "Internal network not found"
+    success_msg: "Internal network configured"
+
+- name: List routers
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/openstack router list --format json
+  environment: "{{ openstack_env }}"
+  register: routers_list
+  changed_when: false
+
+- name: Verify router exists
+  ansible.builtin.assert:
+    that:
+      - (routers_list.stdout | from_json) | length > 0
+    fail_msg: "No routers configured"
+    success_msg: "Router configured"

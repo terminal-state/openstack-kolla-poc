@@ -1,0 +1,49 @@
+---
+- name: Define libvirt networks
+  community.libvirt.virt_net:
+    name: "{{ item.name }}"
+    state: present
+    autostart: true
+    xml: |
+      <network>
+        <name>{{ item.name }}</name>
+        <bridge name='{{ item.bridge }}' stp='off' delay='0'/>
+        <domain name='{{ base_domain }}'/>
+        <forward mode='nat'/>
+        <ip address='{{ item.cidr | ansible.utils.ipaddr("1") | ansible.utils.ipaddr("address") }}' 
+            netmask='{{ item.cidr | ansible.utils.ipaddr("netmask") }}'>
+          {% if item.name == 'mgmt' %}
+          <dhcp>
+            <range start='{{ item.cidr | ansible.utils.ipaddr("10") | ansible.utils.ipaddr("address") }}'
+                   end='{{ item.cidr | ansible.utils.ipaddr("50") | ansible.utils.ipaddr("address") }}'/>
+          </dhcp>
+          {% endif %}
+        </ip>
+      </network>
+  loop:
+    - "{{ mgmt_network }}"
+    - "{{ storage_network }}"
+    - "{{ provider_network }}"
+  register: network_defined
+
+- name: Start libvirt networks
+  community.libvirt.virt_net:
+    name: "{{ item.name }}"
+    state: active
+  loop:
+    - "{{ mgmt_network }}"
+    - "{{ storage_network }}"
+    - "{{ provider_network }}"
+  register: network_started
+  retries: 3
+  delay: 5
+  until: network_started is succeeded
+
+- name: Verify networks are active
+  community.libvirt.virt_net:
+    command: list_nets
+  register: active_networks
+  failed_when: 
+    - "'mgmt' not in active_networks.list_nets"
+    - "'storage' not in active_networks.list_nets"
+    - "'provider' not in active_networks.list_nets"

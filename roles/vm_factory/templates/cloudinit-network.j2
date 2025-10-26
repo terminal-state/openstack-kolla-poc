@@ -1,0 +1,21 @@
+network:
+  version: 2
+  renderer: NetworkManager
+  ethernets:
+{% for n in vm_here.nets %}
+    nic{{ loop.index0 }}:
+      match:
+        macaddress: {{ n.mac }}
+      set-name: {{ 'ens' ~ (3 + loop.index0) }}   # ens3/4/5
+      addresses: [{{ n.ip }}]
+      dhcp4: false
+      dhcp6: false
+{% if n.gw is defined %}
+      gateway4: {{ n.gw }}
+{% endif %}
+{% if n.dns is defined %}
+      nameservers:
+        addresses: [{{ n.dns | join(', ') }}]
+{% endif %}
+{% endfor %}
+

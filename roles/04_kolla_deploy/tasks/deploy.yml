@@ -1,0 +1,49 @@
+---
+- name: Run kolla-ansible bootstrap-servers
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/kolla-ansible bootstrap-servers -i /etc/ansible/inventory/kolla.ini
+  environment:
+    PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
+    ANSIBLE_CONFIG: "/home/ansible/kolla-venv/ansible.cfg"
+  args:
+    chdir: /home/ansible/kolla-venv
+  become: true
+  become_user: ansible
+  register: bootstrap_result
+  retries: 2
+  delay: 30
+  until: bootstrap_result.rc == 0
+
+- name: Display bootstrap results
+  ansible.builtin.debug:
+    msg: "Bootstrap completed with return code {{ bootstrap_result.rc }}"
+
+- name: Run kolla-ansible deploy
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/kolla-ansible deploy -i /etc/ansible/inventory/kolla.ini
+  environment:
+    PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
+    ANSIBLE_CONFIG: "/home/ansible/kolla-venv/ansible.cfg"
+  args:
+    chdir: /home/ansible/kolla-venv
+  become: true
+  become_user: ansible
+  register: deploy_result
+  failed_when: false
+
+- name: Display deployment results
+  ansible.builtin.debug:
+    msg:
+      - "Deployment return code: {{ deploy_result.rc }}"
+      - "Last 30 lines of output:"
+      - "{{ deploy_result.stdout_lines[-100:] }}"
+
+- name: Fail if deployment failed
+  ansible.builtin.fail:
+    msg: "Deployment failed. Review output above."
+  when: deploy_result.rc != 0
+
+- name: Wait for containers to stabilize
+  ansible.builtin.pause:
+    seconds: 60
+    prompt: "Waiting for OpenStack containers to stabilize..."

@@ -1,0 +1,16 @@
+---
+- name: Import pre-deployment checks
+  ansible.builtin.import_tasks: prepare_volumes.yml
+  tags: [volumes]
+
+- name: Import volume preparation tasks
+  ansible.builtin.import_tasks: pre_checks.yml
+  tags: [prechecks]
+
+- name: Import deployment tasks
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [deploy]
+
+- name: Import post-deployment tasks
+  ansible.builtin.import_tasks: post_deploy.yml
+  tags: [post_deploy]

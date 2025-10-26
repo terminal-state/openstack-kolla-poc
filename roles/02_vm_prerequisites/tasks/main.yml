@@ -1,0 +1,29 @@
+---
+# Skipping cloud-init wait - VMs are already accessible
+# - name: Wait for cloud-init to complete
+#   ansible.builtin.command: cloud-init status --wait
+#   become: true
+#   changed_when: false
+#   register: cloudinit_wait
+#   retries: 10
+#   delay: 30
+#   until: cloudinit_wait.rc == 0
+
+- name: Gather facts after cloud-init
+  ansible.builtin.setup:
+
+- name: Import system configuration tasks
+  ansible.builtin.import_tasks: system_config.yml
+  tags: [system]
+
+- name: Import Docker installation tasks
+  ansible.builtin.import_tasks: docker.yml
+  tags: [docker]
+
+- name: Import NTP client configuration tasks
+  ansible.builtin.import_tasks: ntp_client.yml
+  tags: [ntp]
+
+- name: Import networking configuration tasks
+  ansible.builtin.import_tasks: networking.yml
+  tags: [networking]

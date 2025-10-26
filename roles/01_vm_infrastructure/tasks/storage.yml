@@ -1,0 +1,27 @@
+---
+- name: Ensure storage directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ images_dir }}"
+    - /var/lib/libvirt/pools
+
+- name: Define libvirt storage pool
+  community.libvirt.virt_pool:
+    name: default
+    state: present
+    autostart: true
+    xml: |
+      <pool type='dir'>
+        <name>default</name>
+        <target>
+          <path>{{ images_dir }}</path>
+        </target>
+      </pool>
+
+- name: Start libvirt storage pool
+  community.libvirt.virt_pool:
+    name: default
+    state: active

@@ -1,0 +1,34 @@
+---
+- name: Download Cirros test image
+  ansible.builtin.get_url:
+    url: "http://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img"
+    dest: /tmp/cirros.img
+    mode: "0644"
+  register: cirros_download
+  retries: 3
+  delay: 10
+  until: cirros_download is succeeded
+
+- name: Upload Cirros image to Glance
+  openstack.cloud.image:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    name: cirros
+    container_format: bare
+    disk_format: qcow2
+    state: present
+    filename: /tmp/cirros.img
+    is_public: true
+    properties:
+      os_type: linux
+      os_distro: cirros
+
+- name: Clean up downloaded image
+  ansible.builtin.file:
+    path: /tmp/cirros.img
+    state: absent

@@ -1,0 +1,21 @@
+---
+- name: Check if base image exists
+  ansible.builtin.stat:
+    path: "{{ images_dir }}/Rocky-9-GenericCloud.latest.x86_64.qcow2"
+  register: base_image_stat
+
+- name: Download Rocky Linux base image
+  ansible.builtin.get_url:
+    url: "{{ rocky_image_url }}"
+    dest: "{{ images_dir }}/Rocky-9-GenericCloud.latest.x86_64.qcow2"
+    mode: "0644"
+    timeout: 600
+  when: not base_image_stat.stat.exists
+  register: image_download
+  retries: 3
+  delay: 10
+  until: image_download is succeeded
+
+- name: Set base image path fact
+  ansible.builtin.set_fact:
+    base_image_path: "{{ images_dir }}/Rocky-9-GenericCloud.latest.x86_64.qcow2"

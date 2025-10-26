@@ -1,0 +1,90 @@
+---
+- name: Source admin credentials
+  ansible.builtin.shell: |
+    source /etc/kolla/admin-openrc.sh
+    env | grep OS_
+  register: admin_env
+  changed_when: false
+
+- name: Set OpenStack environment facts
+  ansible.builtin.set_fact:
+    openstack_env: "{{ admin_env.stdout | regex_findall('(OS_[^=]+)=(.+)') | items2dict }}"
+
+- name: Create external provider network
+  openstack.cloud.network:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    name: external
+    external: true
+    provider_network_type: flat
+    provider_physical_network: physnet1
+    state: present
+  register: external_network
+
+- name: Create external subnet
+  openstack.cloud.subnet:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    network_name: external
+    name: external-subnet
+    cidr: "192.168.102.0/24"
+    gateway_ip: "192.168.102.1"
+    enable_dhcp: false
+    allocation_pool_start: "192.168.102.100"
+    allocation_pool_end: "192.168.102.200"
+    state: present
+
+- name: Create internal network
+  openstack.cloud.network:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    name: internal
+    state: present
+
+- name: Create internal subnet
+  openstack.cloud.subnet:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    network_name: internal
+    name: internal-subnet
+    cidr: "10.0.0.0/24"
+    gateway_ip: "10.0.0.1"
+    dns_nameservers:
+      - 8.8.8.8
+      - 8.8.4.4
+    state: present
+
+- name: Create router
+  openstack.cloud.router:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    name: router1
+    network: external
+    interfaces:
+      - internal-subnet
+    state: present

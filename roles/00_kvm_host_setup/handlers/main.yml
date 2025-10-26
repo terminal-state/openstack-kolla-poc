@@ -1,0 +1,11 @@
+---
+- name: reload kvm module
+  ansible.builtin.shell: |
+    modprobe -r kvm_intel kvm || modprobe -r kvm_amd kvm || true
+    modprobe kvm_intel || modprobe kvm_amd || true
+  failed_when: false
+
+- name: restart chronyd
+  ansible.builtin.systemd:
+    name: chronyd
+    state: restarted

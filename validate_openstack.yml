@@ -1,0 +1,17 @@
+---
+- name: Validate OpenStack deployment
+  hosts: control
+  become: false
+  tags: [validate]
+  
+  pre_tasks:
+    - name: Source admin credentials
+      ansible.builtin.shell: |
+        source /etc/kolla/admin-openrc.sh
+        echo "OS_AUTH_URL=$OS_AUTH_URL"
+      register: openrc_check
+      changed_when: false
+      failed_when: "'OS_AUTH_URL' not in openrc_check.stdout"
+  
+  roles:
+    - role: 06_openstack_validate

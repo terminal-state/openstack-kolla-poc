@@ -1,0 +1,43 @@
+#cloud-config
+users:
+  - name: {{ vm_key_user }}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: wheel
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - {{ vm_ssh_authorized_key }}
+ssh_pwauth: false
+disable_root: true
+packages:
+  - python3
+  - python3-pip
+{% if vm_type == 'control' %}
+  - python3.11
+  - python3.11-devel
+  - gcc
+  - make
+  - libffi-devel
+  - openssl-devel
+{% endif %}
+  - lvm2
+  - tuned
+  - chrony
+runcmd:
+  - tuned-adm profile virtual-guest
+  - systemctl enable --now chronyd
+{% if vm_type == 'control' and vm_specs.disks | length > 1 %}
+  - pvcreate /dev/vdb
+  - vgcreate cinder-volumes /dev/vdb
+{% endif %}
+{% if vm_type == 'compute' %}
+  - systemctl enable --now libvirtd
+  - usermod -aG libvirt {{ vm_key_user }}
+{% endif %}
+  - dnf clean all
+  - dnf makecache
+  - nmcli networking off
+  - nmcli con reload
+  - nmcli networking on
+package_update: true
+package_upgrade: true
+final_message: "VM {{ vm_name }} is ready after $UPTIME seconds"

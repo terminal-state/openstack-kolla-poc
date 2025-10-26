@@ -1,0 +1,17 @@
+---
+- name: Detect primary network interface
+  ansible.builtin.shell: |
+    ip -o addr show | awk '$4 == "{{ ansible_host }}/24" {print $2}'
+  register: primary_iface_result
+  changed_when: false
+
+- name: Set primary interface fact
+  ansible.builtin.set_fact:
+    primary_network_interface: "{{ primary_iface_result.stdout | trim }}"
+
+- name: Verify interface was detected
+  ansible.builtin.assert:
+    that:
+      - primary_network_interface != ""
+    fail_msg: "Could not detect primary network interface"
+    success_msg: "Primary interface detected: {{ primary_network_interface }}"

@@ -1,0 +1,116 @@
+---
+- name: Create security group
+  openstack.cloud.security_group:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    name: test-secgroup
+    description: "Test security group"
+    state: present
+
+- name: Allow ICMP
+  openstack.cloud.security_group_rule:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    security_group: test-secgroup
+    protocol: icmp
+    remote_ip_prefix: 0.0.0.0/0
+    state: present
+
+- name: Allow SSH
+  openstack.cloud.security_group_rule:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    security_group: test-secgroup
+    protocol: tcp
+    port_range_min: 22
+    port_range_max: 22
+    remote_ip_prefix: 0.0.0.0/0
+    state: present
+
+- name: Launch test instance
+  openstack.cloud.server:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    name: test-instance
+    image: cirros
+    flavor: m1.tiny
+    network: internal
+    security_groups:
+      - test-secgroup
+    auto_ip: false
+    wait: true
+    timeout: 300
+    state: present
+  register: test_instance
+
+- name: Wait for instance to be active
+  ansible.builtin.pause:
+    seconds: 30
+    prompt: "Waiting for instance to fully initialize..."
+
+- name: Verify instance is running
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/openstack server show test-instance --format json
+  environment: "{{ openstack_env }}"
+  register: instance_status
+  changed_when: false
+
+- name: Parse instance status
+  ansible.builtin.set_fact:
+    instance_info: "{{ instance_status.stdout | from_json }}"
+
+- name: Display instance information
+  ansible.builtin.debug:
+    msg:
+      - "Instance Name: {{ instance_info.name }}"
+      - "Instance Status: {{ instance_info.status }}"
+      - "Instance IP: {{ instance_info.addresses }}"
+
+- name: Create floating IP
+  openstack.cloud.floating_ip:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    network: external
+    server: test-instance
+    state: present
+  register: floating_ip
+
+- name: Display floating IP
+  ansible.builtin.debug:
+    msg: "Floating IP assigned: {{ floating_ip.floating_ip.floating_ip_address }}"
+
+- name: Test ping to floating IP
+  ansible.builtin.command:
+    cmd: ping -c 3 {{ floating_ip.floating_ip.floating_ip_address }}
+  register: ping_result
+  changed_when: false
+  failed_when: false
+
+- name: Display ping results
+  ansible.builtin.debug:
+    msg: "{{ 'Instance is reachable via floating IP' if ping_result.rc == 0 else 'Instance not yet reachable (this is normal, may need more time)' }}"

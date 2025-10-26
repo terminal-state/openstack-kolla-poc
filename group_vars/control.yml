@@ -1,0 +1,37 @@
+---
+# Control node specific variables
+node_type: control
+
+# VM specifications for control nodes
+vm_specs:
+  vcpus: 16
+  ram_mb: 65536
+  disks:
+    - name: root
+      size_gb: 200
+    - name: cinder-lvm
+      size_gb: 500
+
+# Network interfaces
+networks:
+  - network: mgmt
+    ip: "192.168.100.100/24"
+    gateway: "192.168.100.1"
+    dns: ["192.168.100.1"]
+  - network: storage
+    ip: "192.168.101.100/24"
+  - network: provider
+    ip: "192.168.102.100/24"
+
+# Packages specific to control node
+control_packages:
+  - python3
+  - python3-pip
+  - python3.11
+  - python3.11-devel
+  - gcc
+  - make
+  - libffi-devel
+  - openssl-devel
+  - lvm2
+  - tuned

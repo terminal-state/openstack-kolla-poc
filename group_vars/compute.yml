@@ -1,0 +1,18 @@
+---
+# Compute node specific variables
+node_type: compute
+
+# VM specifications for compute nodes
+vm_specs:
+  vcpus: 8
+  ram_mb: 32768
+  disks:
+    - name: root
+      size_gb: 100
+
+# Packages specific to compute nodes
+compute_packages:
+  - python3
+  - qemu-kvm
+  - libvirt
+  - tuned

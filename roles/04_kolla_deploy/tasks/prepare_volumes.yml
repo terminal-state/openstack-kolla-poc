@@ -1,0 +1,10 @@
+---
+- name: Ensure Docker volumes exist with correct permissions
+  ansible.builtin.shell: |
+    docker volume create kolla_logs
+    chmod 755 /var/lib/docker/volumes/kolla_logs/_data
+    chown -R 42400:42400 /var/lib/docker/volumes/kolla_logs/_data
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['vms'] }}"
+  run_once: false

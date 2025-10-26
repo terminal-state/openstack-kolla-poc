@@ -1,0 +1,99 @@
+---
+- name: Check if VM already exists
+  community.libvirt.virt:
+    command: list_vms
+  register: existing_vms
+
+- name: Skip if VM already exists
+  ansible.builtin.debug:
+    msg: "VM {{ vm_name }} already exists, skipping creation"
+  when: vm_name in existing_vms.list_vms
+
+- name: Create VM block
+  when: vm_name not in existing_vms.list_vms
+  block:
+    - name: Create root disk from base image
+      ansible.builtin.command:
+        cmd: >
+          qemu-img create -f qcow2 -F qcow2
+          -b {{ base_image_path }}
+          {{ images_dir }}/{{ vm_name }}-root.qcow2
+          {{ vm_specs.disks[0].size_gb }}G
+      args:
+        creates: "{{ images_dir }}/{{ vm_name }}-root.qcow2"
+
+    - name: Create additional disks
+      ansible.builtin.command:
+        cmd: >
+          qemu-img create -f qcow2
+          {{ images_dir }}/{{ vm_name }}-{{ item.name }}.qcow2
+          {{ item.size_gb }}G
+      loop: "{{ vm_specs.disks[1:] }}"
+      when: vm_specs.disks | length > 1
+      args:
+        creates: "{{ images_dir }}/{{ vm_name }}-{{ item.name }}.qcow2"
+
+    - name: Generate cloud-init meta-data
+      ansible.builtin.copy:
+        dest: "{{ images_dir }}/{{ vm_name }}-meta-data"
+        content: |
+          instance-id: {{ vm_name }}
+          local-hostname: {{ vm_name }}
+        mode: "0644"
+
+    - name: Generate cloud-init user-data
+      ansible.builtin.template:
+        src: user-data.j2
+        dest: "{{ images_dir }}/{{ vm_name }}-user-data"
+        mode: "0644"
+
+    - name: Generate cloud-init network-config
+      ansible.builtin.template:
+        src: network-config.j2
+        dest: "{{ images_dir }}/{{ vm_name }}-network-config"
+        mode: "0644"
+
+    - name: Create cloud-init ISO
+      ansible.builtin.command:
+        cmd: >
+          genisoimage -output {{ images_dir }}/{{ vm_name }}-cidata.iso
+          -volid cidata -joliet -rock -graft-points
+          user-data={{ images_dir }}/{{ vm_name }}-user-data
+          meta-data={{ images_dir }}/{{ vm_name }}-meta-data
+          network-config={{ images_dir }}/{{ vm_name }}-network-config
+      args:
+        creates: "{{ images_dir }}/{{ vm_name }}-cidata.iso"
+
+    - name: Build virt-install command
+      ansible.builtin.set_fact:
+        virt_install_cmd: >
+          virt-install
+          --name {{ vm_name }}
+          --memory {{ vm_specs.ram_mb }}
+          --vcpus {{ vm_specs.vcpus }}
+          --cpu host-passthrough
+          --os-variant rocky9
+          --disk path={{ images_dir }}/{{ vm_name }}-root.qcow2,device=disk,bus=virtio
+          {% for disk in vm_specs.disks[1:] %}
+          --disk path={{ images_dir }}/{{ vm_name }}-{{ disk.name }}.qcow2,device=disk,bus=virtio
+          {% endfor %}
+          --disk path={{ images_dir }}/{{ vm_name }}-cidata.iso,device=cdrom
+          {% for net in vm_networks %}
+          --network network={{ net.network }},model=virtio,mac={{ net.mac }}
+          {% endfor %}
+          --graphics none
+          --console pty,target_type=serial
+          --noautoconsole
+          --import
+
+    - name: Create and start VM
+      ansible.builtin.command:
+        cmd: "{{ virt_install_cmd }}"
+      register: vm_create
+      changed_when: "'Domain creation completed' in vm_create.stdout or vm_create.rc == 0"
+      failed_when: vm_create.rc != 0 and 'already exists' not in vm_create.stderr
+
+    - name: Ensure VM is running
+      community.libvirt.virt:
+        name: "{{ vm_name }}"
+        state: running

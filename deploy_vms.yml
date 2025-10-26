@@ -1,0 +1,50 @@
+---
+- name: Prepare KVM host and create VMs
+  hosts: kvmhost
+  become: true
+  gather_facts: true
+  tags: [kvm_host]
+  
+  pre_tasks:
+    - name: Verify KVM host OS
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] | lower is search('alma|rocky')
+          - (ansible_facts['distribution_major_version'] | int) >= 9
+        fail_msg: "KVM host must be AlmaLinux/Rocky Linux 9+"
+    
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg:
+          - "Starting OpenStack {{ openstack_release }} deployment"
+          - "KVM Host: {{ ansible_hostname }}"
+          - "VMs to create: {{ vms | length }}"
+  
+  roles:
+    - role: 00_kvm_host_setup
+      tags: [setup]
+    - role: vm_factory
+      tags: [infrastructure]
+
+- name: Wait for VMs to be ready
+  hosts: vms
+  gather_facts: false
+  tasks:
+    - name: Wait for SSH to be available
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+        delay: 10
+      register: ssh_result
+      retries: 3
+      delay: 30
+      until: ssh_result is succeeded
+    
+    - name: Gather facts after VMs are ready
+      ansible.builtin.setup:
+
+- name: Configure VM prerequisites
+  hosts: vms
+  become: true
+  tags: [vm_prereqs]
+  roles:
+    - role: 02_vm_prerequisites

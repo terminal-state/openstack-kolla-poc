@@ -1,0 +1,16 @@
+---
+- name: Import service validation tasks
+  ansible.builtin.import_tasks: validate_services.yml
+  tags: [services]
+
+- name: Import network validation tasks
+  ansible.builtin.import_tasks: validate_networks.yml
+  tags: [networks]
+
+- name: Import instance creation test
+  ansible.builtin.import_tasks: test_instance.yml
+  tags: [instance]
+
+- name: Import final validation tasks
+  ansible.builtin.import_tasks: final_validation.yml
+  tags: [final]

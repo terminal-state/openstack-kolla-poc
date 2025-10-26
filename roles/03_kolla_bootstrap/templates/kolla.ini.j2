@@ -1,0 +1,148 @@
+# Kolla-Ansible inventory file
+[control]
+{% for host in groups['control'] %}
+{{ host }} ansible_host={{ hostvars[host].ansible_host }} ansible_user=ansible ansible_ssh_private_key_file=/home/ansible/.ssh/id_ed25519 ansible_python_interpreter=/usr/bin/python3 api_interface_address={{ hostvars[host].ansible_host }}
+{% endfor %}
+
+[network:children]
+control
+compute
+
+[compute]
+{% for host in groups['compute'] %}
+{{ host }} ansible_host={{ hostvars[host].ansible_host }} ansible_user=ansible ansible_ssh_private_key_file=/home/ansible/.ssh/id_ed25519 ansible_python_interpreter=/usr/bin/python3 api_interface_address={{ hostvars[host].ansible_host }}
+{% endfor %}
+
+[monitoring:children]
+control
+
+[storage:children]
+control
+
+[deployment]
+localhost ansible_connection=local
+
+# Core services
+[loadbalancer:children]
+control
+
+[mariadb:children]
+control
+
+[rabbitmq:children]
+control
+
+[memcached:children]
+control
+
+# OpenStack services
+[keystone:children]
+control
+
+[glance-api:children]
+control
+
+[placement-api:children]
+control
+
+[nova-api:children]
+control
+
+[nova-conductor:children]
+control
+
+[nova-scheduler:children]
+control
+
+[nova-novncproxy:children]
+control
+
+[nova-compute:children]
+compute
+
+[neutron-server:children]
+control
+
+[neutron-dhcp-agent:children]
+control
+
+[neutron-l3-agent:children]
+control
+
+[neutron-metadata-agent:children]
+control
+
+[neutron-openvswitch-agent:children]
+network
+
+[cinder-api:children]
+control
+
+[cinder-scheduler:children]
+control
+
+[cinder-volume:children]
+control
+
+[cinder-backup:children]
+control
+
+[horizon:children]
+control
+
+# Additional required groups
+[openvswitch:children]
+network
+
+[kolla-toolbox:children]
+control
+
+[cron:children]
+control
+
+# Empty groups to avoid warnings
+[baremetal]
+[tls-backend]
+
+# Kolla logs group
+[kolla-logs:children]
+control
+compute
+
+# Fluentd group (even if disabled, group must exist)
+[fluentd:children]
+control
+compute
+
+[nova-metadata:children]
+control
+
+[nova-super-conductor]
+# Empty group - super conductor is disabled
+
+[neutron-ovn-metadata-agent]
+# Empty group - OVN not used
+
+[neutron-ovn-agent]
+# Empty group - OVN not used
+
+[neutron-bgp-dragent]
+# Empty group - BGP not enabled
+
+[neutron-infoblox-ipam-agent]
+# Empty group - Infoblox not enabled
+
+[neutron-metering-agent]
+# Empty group - Metering not enabled
+
+[ironic-neutron-agent]
+# Empty group - Ironic not enabled
+
+[nova-spicehtml5proxy]
+# Empty group - SPICE not enabled
+
+[nova-serialproxy]
+# Empty group - Serial console not enabled
+
+[nova-compute-ironic]
+# Empty group - Ironic not enabled

@@ -1,0 +1,16 @@
+---
+- name: Import system preparation tasks
+  ansible.builtin.import_tasks: system_prep.yml
+  tags: [system]
+
+- name: Import virtualisation setup tasks
+  ansible.builtin.import_tasks: virtualisation.yml
+  tags: [virtualisation]
+
+- name: Import SSH key setup tasks
+  ansible.builtin.import_tasks: ssh_keys.yml
+  tags: [ssh]
+
+- name: Import NTP configuration tasks
+  ansible.builtin.import_tasks: ntp.yml
+  tags: [ntp]

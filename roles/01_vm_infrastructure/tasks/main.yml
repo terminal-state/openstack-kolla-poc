@@ -1,0 +1,16 @@
+---
+- name: Import libvirt network tasks
+  ansible.builtin.import_tasks: networks.yml
+  tags: [networks]
+
+- name: Import storage pool tasks
+  ansible.builtin.import_tasks: storage.yml
+  tags: [storage]
+
+- name: Import base image tasks
+  ansible.builtin.import_tasks: base_image.yml
+  tags: [images]
+
+- name: Import VM creation tasks
+  ansible.builtin.import_tasks: create_vms.yml
+  tags: [create_vms]

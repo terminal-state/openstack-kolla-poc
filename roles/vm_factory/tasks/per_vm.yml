@@ -1,0 +1,105 @@
+---
+# Build one VM via domain XML + qemu-img (compatible with older community.libvirt.virt)
+
+# Render per-VM files (kept on disk with unique names)
+- name: Render cloud-init user-data (per-VM)
+  ansible.builtin.template:
+    src: cloudinit-userdata.j2
+    dest: "/var/lib/libvirt/images/{{ vm.name }}-seed-user-data"
+    mode: "0644"
+  vars: { vm_here: "{{ vm }}" }
+
+- name: Render cloud-init meta-data (per-VM)
+  ansible.builtin.template:
+    src: cloudinit-metadata.j2
+    dest: "/var/lib/libvirt/images/{{ vm.name }}-seed-meta-data"
+    mode: "0644"
+  vars: { vm_here: "{{ vm }}" }
+
+- name: Render cloud-init network-config (per-VM)
+  ansible.builtin.template:
+    src: cloudinit-network.j2
+    dest: "/var/lib/libvirt/images/{{ vm.name }}-seed-network-config"
+    mode: "0644"
+  vars: { vm_here: "{{ vm }}" }
+
+# Detect an ISO tool we can use
+- name: Check for ISO tool
+  ansible.builtin.command: bash -lc "command -v genisoimage || command -v mkisofs || command -v xorriso"
+  register: iso_tool
+  changed_when: false
+  failed_when: iso_tool.rc != 0
+
+# Create the NoCloud seed ISO with CORRECT filenames at ISO root
+- name: Create cloud-init seed image (NoCloud with graft-points)
+  ansible.builtin.command: >
+    {{ 'genisoimage' if 'genisoimage' in iso_tool.stdout
+       else ('mkisofs' if 'mkisofs' in iso_tool.stdout
+       else 'xorriso -as mkisofs') }}
+    -output /var/lib/libvirt/images/{{ vm.name }}-cidata.iso
+    -volid cidata -joliet -rock -graft-points
+    user-data=/var/lib/libvirt/images/{{ vm.name }}-seed-user-data
+    meta-data=/var/lib/libvirt/images/{{ vm.name }}-seed-meta-data
+    network-config=/var/lib/libvirt/images/{{ vm.name }}-seed-network-config
+  args:
+    creates: "/var/lib/libvirt/images/{{ vm.name }}-cidata.iso"
+
+# ----- Disks -----
+- name: Get root disk size (GB)
+  ansible.builtin.set_fact:
+    vm_root_size_gb: "{{ (vm.disks | selectattr('name','equalto','root') | first).size_gb }}"
+
+- name: Create root qcow2 (backed by base cloud image)
+  ansible.builtin.command: >
+    qemu-img create -f qcow2 -F qcow2
+    -b {{ cloud_image_local }}
+    /var/lib/libvirt/images/{{ vm.name }}-root.qcow2 {{ vm_root_size_gb }}G
+  args:
+    creates: "/var/lib/libvirt/images/{{ vm.name }}-root.qcow2"
+
+- name: Create additional data disks
+  when: (vm.disks | length) > 1
+  loop: "{{ vm.disks | rejectattr('name','equalto','root') | list }}"
+  loop_control: { loop_var: dsk }
+  ansible.builtin.command: >
+    qemu-img create -f qcow2
+    /var/lib/libvirt/images/{{ vm.name }}-{{ dsk.name }}.qcow2 {{ dsk.size_gb }}G
+  args:
+    creates: "/var/lib/libvirt/images/{{ vm.name }}-{{ dsk.name }}.qcow2"
+
+# ----- Network names for XML -----
+- name: Collect network names
+  ansible.builtin.set_fact:
+    vm_net_names: "{{ vm.nets | map(attribute='network') | list }}"
+
+# ----- Domain XML -----
+- name: Render domain XML
+  ansible.builtin.template:
+    src: domain-xml.j2
+    dest: "/var/lib/libvirt/images/{{ vm.name }}.xml"
+    mode: "0644"
+  vars:
+    vm_here: "{{ vm }}"
+    vm_root_path: "/var/lib/libvirt/images/{{ vm.name }}-root.qcow2"
+    vm_extra_disks: "{{ vm.disks | rejectattr('name','equalto','root') | list }}"
+    vm_iso_path: "/var/lib/libvirt/images/{{ vm.name }}-cidata.iso"
+    vm_networks: "{{ vm_net_names }}"
+    cpu_mode: "{{ vm_defaults.cpu_mode }}"
+    mem_mib: "{{ vm.ram_mb }}"
+
+# ----- Define, start, autostart -----
+- name: Define VM from XML
+  community.libvirt.virt:
+    command: define
+    xml: "{{ lookup('file', '/var/lib/libvirt/images/' ~ vm.name ~ '.xml') }}"
+
+- name: Start VM
+  community.libvirt.virt:
+    name: "{{ vm.name }}"
+    state: running
+
+- name: Enable autostart
+  community.libvirt.virt:
+    name: "{{ vm.name }}"
+    autostart: true
+

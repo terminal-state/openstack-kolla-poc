@@ -1,0 +1,59 @@
+---
+- name: Destroy all VMs and cleanup
+  hosts: kvmhost
+  become: true
+  gather_facts: true
+  
+  vars_prompt:
+    - name: confirm_destroy
+      prompt: "Are you sure you want to destroy ALL VMs and data? Type 'yes' to confirm"
+      private: false
+  
+  pre_tasks:
+    - name: Verify confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm_destroy == "yes"
+        fail_msg: "Destruction cancelled - confirmation not received"
+  
+  tasks:
+    - name: Get list of all VMs
+      community.libvirt.virt:
+        command: list_vms
+      register: all_vms
+    
+    - name: Destroy running VMs
+      community.libvirt.virt:
+        name: "{{ item }}"
+        state: destroyed
+      loop: "{{ all_vms.list_vms }}"
+      when: item in ['ctrl-01', 'cmp-01', 'cmp-02', 'cmp-03']
+      failed_when: false
+    
+    - name: Undefine VMs
+      community.libvirt.virt:
+        name: "{{ item }}"
+        command: undefine
+      loop: ['ctrl-01', 'cmp-01', 'cmp-02', 'cmp-03']
+      failed_when: false
+    
+    - name: Remove VM disk images
+      ansible.builtin.file:
+        path: "{{ images_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - "ctrl-01*"
+        - "cmp-01*"
+        - "cmp-02*"
+        - "cmp-03*"
+      failed_when: false
+    
+    - name: Find and remove VM files
+      ansible.builtin.shell: |
+        rm -f {{ images_dir }}/ctrl-01* {{ images_dir }}/cmp-0*
+      args:
+        warn: false
+    
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: "All VMs destroyed. Ready for fresh deployment."

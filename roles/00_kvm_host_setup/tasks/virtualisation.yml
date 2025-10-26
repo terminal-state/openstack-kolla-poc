@@ -1,0 +1,55 @@
+---
+- name: Install virtualisation packages
+  ansible.builtin.dnf:
+    name:
+      - qemu-kvm
+      - libvirt
+      - libvirt-daemon-kvm
+      - virt-install
+      - libguestfs-tools
+      - qemu-img
+      - python3-libvirt
+      - tuned
+      - python3-netaddr
+      - genisoimage
+      - xorriso
+    state: present
+  register: virt_install
+  retries: "{{ max_retries }}"
+  delay: "{{ retry_delay }}"
+  until: virt_install is succeeded
+
+- name: Enable and start libvirtd
+  ansible.builtin.systemd:
+    name: libvirtd
+    enabled: true
+    state: started
+
+- name: Detect CPU vendor
+  ansible.builtin.command: grep -m1 -o 'vendor_id.*' /proc/cpuinfo
+  register: cpu_vendor_raw
+  changed_when: false
+
+- name: Set CPU vendor fact
+  ansible.builtin.set_fact:
+    cpu_vendor: "{{ 'intel' if 'Intel' in cpu_vendor_raw.stdout else 'amd' if 'AMD' in cpu_vendor_raw.stdout else 'unknown' }}"
+
+- name: Configure nested virtualisation for Intel
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/kvm-intel.conf
+    content: "options kvm_intel nested=1\n"
+    mode: "0644"
+  when: cpu_vendor == 'intel'
+  notify: reload kvm module
+
+- name: Configure nested virtualisation for AMD
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/kvm-amd.conf
+    content: "options kvm_amd nested=1\n"
+    mode: "0644"
+  when: cpu_vendor == 'amd'
+  notify: reload kvm module
+
+- name: Set tuned profile for virtualisation host
+  ansible.builtin.command: tuned-adm profile virtual-host
+  changed_when: false

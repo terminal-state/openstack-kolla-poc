@@ -1,0 +1,35 @@
+---
+- name: Ensure ansible user exists
+  ansible.builtin.user:
+    name: "{{ vm_key_user }}"
+    groups: wheel
+    append: true
+    shell: /bin/bash
+    create_home: true
+
+- name: Configure passwordless sudo for wheel group
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/99-wheel-nopasswd
+    mode: "0440"
+    content: "%wheel ALL=(ALL) NOPASSWD:ALL\n"
+    validate: 'visudo -cf %s'
+
+- name: Disable SELinux (for lab environment)
+  ansible.posix.selinux:
+    state: disabled
+  register: selinux_result
+
+- name: Stop and disable firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Reboot if SELinux state changed
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when:
+    - selinux_result is defined
+    - selinux_result.reboot_required | default(false)
+    - ansible_connection != 'local'

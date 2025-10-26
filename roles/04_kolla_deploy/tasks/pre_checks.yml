@@ -1,0 +1,25 @@
+---
+- name: Run kolla-ansible prechecks
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/kolla-ansible prechecks -i /etc/ansible/inventory/kolla.ini
+  environment:
+    PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
+    ANSIBLE_CONFIG: "/home/ansible/kolla-venv/ansible.cfg"
+  args:
+    chdir: /home/ansible/kolla-venv
+  become: true
+  become_user: ansible
+  register: prechecks_result
+  failed_when: false
+
+- name: Display prechecks results
+  ansible.builtin.debug:
+    msg: "{{ prechecks_result.stdout_lines }}"
+  when: prechecks_result.stdout_lines is defined
+
+- name: Check for critical precheck failures
+  ansible.builtin.fail:
+    msg: "Critical prechecks failed. Review output above."
+  when:
+    - prechecks_result.rc != 0
+    - "'FAILED' in prechecks_result.stdout"

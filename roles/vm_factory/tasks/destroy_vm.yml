@@ -1,0 +1,13 @@
+---
+- name: Destroy VM
+  community.libvirt.virt:
+    name: "{{ vm.name }}"
+    command: destroy
+  failed_when: false
+
+- name: Undefine VM and remove storage
+  community.libvirt.virt:
+    name: "{{ vm.name }}"
+    command: undefine
+    flags: remove-all-storage
+  failed_when: false

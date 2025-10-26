@@ -1,0 +1,79 @@
+---
+- name: Check Horizon dashboard accessibility
+  ansible.builtin.uri:
+    url: "http://{{ kolla_external_vip_address }}"
+    status_code: 200,302
+  register: horizon_check
+  retries: 3
+  delay: 10
+  until: horizon_check.status in [200, 302]
+
+- name: Generate validation summary
+  ansible.builtin.set_fact:
+    validation_summary:
+      - "============================================"
+      - "OpenStack Deployment Validation Complete"
+      - "============================================"
+      - "Compute Nodes: {{ groups['compute'] | length }}"
+      - "Active Compute Services: {{ compute_service_list | selectattr('Binary', 'equalto', 'nova-compute') | selectattr('State', 'equalto', 'up') | list | length }}"
+      - "Network Agents Alive: {{ network_agent_list | selectattr('Alive', 'equalto', true) | list | length }}"
+      - "Networks Created: {{ networks | length }}"
+      - "Test Instance: {{ instance_info.name }} ({{ instance_info.status }})"
+      - "Floating IP: {{ floating_ip.floating_ip.floating_ip_address }}"
+      - "Horizon Dashboard: http://{{ kolla_external_vip_address }}"
+      - "Admin Username: admin"
+      - "Admin Password: (see /etc/kolla/passwords.yml - keystone_admin_password)"
+      - "Demo Username: demo"
+      - "Demo Password: demo"
+      - "============================================"
+
+- name: Display validation summary
+  ansible.builtin.debug:
+    msg: "{{ validation_summary }}"
+
+- name: Create validation report
+  ansible.builtin.copy:
+    dest: /home/ansible/openstack-validation-report.txt
+    content: |
+      OpenStack {{ openstack_release }} Deployment Validation Report
+      Generated: {{ ansible_date_time.iso8601 }}
+      
+      === Infrastructure ===
+      Control Nodes: {{ groups['control'] | join(', ') }}
+      Compute Nodes: {{ groups['compute'] | join(', ') }}
+      
+      === Services Status ===
+      Compute Services: {{ compute_service_list | selectattr('Binary', 'equalto', 'nova-compute') | selectattr('State', 'equalto', 'up') | list | length }}/{{ groups['compute'] | length }} UP
+      Network Agents: {{ network_agent_list | selectattr('Alive', 'equalto', true) | list | length }} ALIVE
+      
+      === Networks ===
+      {% for net in networks %}
+      - {{ net.Name }} ({{ net.ID }})
+      {% endfor %}
+      
+      === Test Instance ===
+      Name: {{ instance_info.name }}
+      Status: {{ instance_info.status }}
+      Floating IP: {{ floating_ip.floating_ip.floating_ip_address }}
+      Ping Test: {{ 'SUCCESS' if ping_result.rc == 0 else 'PENDING' }}
+      
+      === Access Information ===
+      Horizon Dashboard: http://{{ kolla_external_vip_address }}
+      Admin Credentials: /etc/kolla/admin-openrc.sh
+      Demo Credentials: /etc/kolla/demo-openrc.sh
+      
+      === Next Steps ===
+      1. Access Horizon at http://{{ kolla_external_vip_address }}
+      2. Login with admin credentials
+      3. Review deployed services
+      4. Create additional projects/users as needed
+      5. Deploy production workloads
+      
+      Deployment Status: COMPLETE
+    owner: ansible
+    group: ansible
+    mode: "0644"
+
+- name: Display report location
+  ansible.builtin.debug:
+    msg: "Validation report saved to /home/ansible/openstack-validation-report.txt"

@@ -1,0 +1,15 @@
+---
+# Loops over VMs by including a per-VM task file.
+- name: Build VMs
+  ansible.builtin.include_tasks: per_vm.yml
+  loop: "{{ vms }}"
+  loop_control:
+    loop_var: vm
+
+- name: Destroy VMs
+  ansible.builtin.include_tasks: destroy_vm.yml
+  loop: "{{ vms }}"
+  loop_control:
+    loop_var: vm
+  when: vm_state | default('present') == 'absent'
+  tags: [destroy]

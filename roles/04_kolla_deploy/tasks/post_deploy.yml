@@ -1,0 +1,35 @@
+---
+- name: Run kolla-ansible post-deploy
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/kolla-ansible post-deploy -i /etc/ansible/inventory/kolla.ini
+  environment:
+    PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
+    ANSIBLE_HOST_KEY_CHECKING: "False"
+    ANSIBLE_COLLECTIONS_PATH: "/home/ansible/kolla-venv/collections"
+  args:
+    chdir: /home/ansible/kolla-venv
+  become: true
+  become_user: ansible
+  register: postdeploy_result
+  retries: 2
+  delay: 10
+  until: postdeploy_result.rc == 0
+
+- name: Verify admin credentials file exists
+  ansible.builtin.stat:
+    path: /etc/kolla/admin-openrc.sh
+  register: admin_creds
+
+- name: Fail if credentials not created
+  ansible.builtin.fail:
+    msg: "Admin credentials file not found at /etc/kolla/admin-openrc.sh"
+  when: not admin_creds.stat.exists
+
+- name: Display post-deploy completion
+  ansible.builtin.debug:
+    msg:
+      - "============================================"
+      - "OpenStack deployment completed!"
+      - "Admin credentials: /etc/kolla/admin-openrc.sh"
+      - "Horizon URL: http://{{ kolla_external_vip_address }}"
+      - "============================================"

@@ -1,0 +1,17 @@
+---
+- name: Configure chrony to use KVM host as NTP server
+  ansible.builtin.copy:
+    dest: /etc/chrony.conf
+    content: |
+      server {{ kvm_host_ip }} iburst
+      driftfile /var/lib/chrony/drift
+      makestep 1.0 3
+      rtcsync
+    mode: "0644"
+  notify: restart chronyd
+
+- name: Enable and start chronyd
+  ansible.builtin.systemd:
+    name: chronyd
+    enabled: true
+    state: started

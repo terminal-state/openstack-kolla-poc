@@ -1,0 +1,33 @@
+---
+- name: Create control node VMs
+  ansible.builtin.include_tasks: create_single_vm.yml
+  loop: "{{ vms | selectattr('name', 'in', groups['control']) | list }}"
+  loop_control:
+    loop_var: vm_def
+  vars:
+    vm_name: "{{ vm_def.name }}"
+    vm_specs:
+      vcpus: "{{ vm_def.vcpus }}"
+      ram_mb: "{{ vm_def.ram_mb }}"
+      disks: "{{ vm_def.disks }}"
+    vm_networks: "{{ vm_def.networks }}"
+    vm_type: control
+
+- name: Create compute node VMs
+  ansible.builtin.include_tasks: create_single_vm.yml
+  loop: "{{ vms | selectattr('name', 'in', groups['compute']) | list }}"
+  loop_control:
+    loop_var: vm_def
+  vars:
+    vm_name: "{{ vm_def.name }}"
+    vm_specs:
+      vcpus: "{{ vm_def.vcpus }}"
+      ram_mb: "{{ vm_def.ram_mb }}"
+      disks: "{{ vm_def.disks }}"
+    vm_networks: "{{ vm_def.networks }}"
+    vm_type: compute
+
+- name: Wait for all VMs to be running
+  ansible.builtin.pause:
+    seconds: 30
+    prompt: "Waiting for VMs to start..."

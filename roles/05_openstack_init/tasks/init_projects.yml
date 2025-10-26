@@ -1,0 +1,62 @@
+---
+- name: Create demo project
+  openstack.cloud.project:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    name: demo
+    description: "Demo Project"
+    domain_id: default
+    enabled: true
+    state: present
+
+- name: Create demo user
+  openstack.cloud.identity_user:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    name: demo
+    password: demo
+    email: demo@example.com
+    domain: default
+    default_project: demo
+    enabled: true
+    state: present
+
+- name: Assign member role to demo user
+  openstack.cloud.role_assignment:
+    auth:
+      auth_url: "{{ openstack_env.OS_AUTH_URL }}"
+      username: "{{ openstack_env.OS_USERNAME }}"
+      password: "{{ openstack_env.OS_PASSWORD }}"
+      project_name: "{{ openstack_env.OS_PROJECT_NAME }}"
+      project_domain_name: "{{ openstack_env.OS_PROJECT_DOMAIN_NAME }}"
+      user_domain_name: "{{ openstack_env.OS_USER_DOMAIN_NAME }}"
+    user: demo
+    role: member
+    project: demo
+    state: present
+
+- name: Create demo openrc file
+  ansible.builtin.copy:
+    dest: /etc/kolla/demo-openrc.sh
+    content: |
+      export OS_PROJECT_DOMAIN_NAME=Default
+      export OS_USER_DOMAIN_NAME=Default
+      export OS_PROJECT_NAME=demo
+      export OS_USERNAME=demo
+      export OS_PASSWORD=demo
+      export OS_AUTH_URL=http://{{ kolla_internal_vip_address }}:5000
+      export OS_IDENTITY_API_VERSION=3
+      export OS_IMAGE_API_VERSION=2
+    mode: "0644"
+    owner: ansible
+    group: ansible

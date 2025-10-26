@@ -1,0 +1,61 @@
+---
+- name: Source admin credentials
+  ansible.builtin.shell: source /etc/kolla/admin-openrc.sh && env | grep OS_
+  register: admin_env
+  changed_when: false
+
+- name: Set OpenStack environment
+  ansible.builtin.set_fact:
+    openstack_env: "{{ admin_env.stdout | regex_findall('(OS_[^=]+)=(.+)') | items2dict }}"
+
+- name: Check compute services
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/openstack compute service list --format json
+  environment: "{{ openstack_env }}"
+  register: compute_services
+  changed_when: false
+
+- name: Parse compute services
+  ansible.builtin.set_fact:
+    compute_service_list: "{{ compute_services.stdout | from_json }}"
+
+- name: Verify all compute nodes are up
+  ansible.builtin.assert:
+    that:
+      - compute_service_list | selectattr('Binary', 'equalto', 'nova-compute') | selectattr('State', 'equalto', 'up') | list | length == groups['compute'] | length
+    fail_msg: "Not all compute nodes are reporting as 'up'"
+    success_msg: "All {{ groups['compute'] | length }} compute nodes are operational"
+
+- name: Check network agents
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/openstack network agent list --format json
+  environment: "{{ openstack_env }}"
+  register: network_agents
+  changed_when: false
+
+- name: Parse network agents
+  ansible.builtin.set_fact:
+    network_agent_list: "{{ network_agents.stdout | from_json }}"
+
+- name: Verify critical network agents are alive
+  ansible.builtin.assert:
+    that:
+      - network_agent_list | selectattr('Agent Type', 'equalto', 'DHCP agent') | selectattr('Alive', 'equalto', true) | list | length > 0
+      - network_agent_list | selectattr('Agent Type', 'equalto', 'L3 agent') | selectattr('Alive', 'equalto', true) | list | length > 0
+      - network_agent_list | selectattr('Agent Type', 'equalto', 'Metadata agent') | selectattr('Alive', 'equalto', true) | list | length > 0
+    fail_msg: "Critical network agents are not alive"
+    success_msg: "All critical network agents are operational"
+
+- name: Check volume services
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/openstack volume service list --format json
+  environment: "{{ openstack_env }}"
+  register: volume_services
+  changed_when: false
+
+- name: Display service status summary
+  ansible.builtin.debug:
+    msg:
+      - "Compute services: {{ compute_service_list | selectattr('Binary', 'equalto', 'nova-compute') | selectattr('State', 'equalto', 'up') | list | length }}/{{ groups['compute'] | length }} up"
+      - "Network agents: {{ network_agent_list | selectattr('Alive', 'equalto', true) | list | length }} alive"
+      - "Volume services operational"

@@ -1,0 +1,116 @@
+vm_ssh_authorized_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEHZQ47jZM09z1bqFBQUjevLB8h32DEc/0mm3bnh+4YB
+cloud_image_local: /var/lib/libvirt/images/Rocky-9-GenericCloud.latest.x86_64.qcow2
+
+# libvirt virtual networks (no changes to physical NIC)
+
+libvirt_networks:
+  # Management network
+  - name: mgmt
+    forward_mode: nat
+    bridge: virbr-mgmt
+    cidr: 192.168.100.0/24
+    dhcp: { start: 192.168.100.200, end: 192.168.100.254 }
+    hosts:
+      - { mac: "52:54:00:f2:7b:14", ip: "192.168.100.100", name: "ctrl-01" }
+      - { mac: "52:54:00:f4:53:f8", ip: "192.168.100.101", name: "cmp-01" }
+      - { mac: "52:54:00:a4:0d:fd", ip: "192.168.100.102", name: "cmp-02" }
+      - { mac: "52:54:00:90:96:c4", ip: "192.168.100.103", name: "cmp-03" }
+
+  # Storage network (internal only)
+  - name: storage
+    forward_mode: isolated
+    bridge: virbr-storage
+    cidr: 192.168.101.0/24
+    dhcp: { start: 192.168.101.200, end: 192.168.101.254 }
+    hosts:
+      - { mac: "52:54:00:d3:4c:09", ip: "192.168.101.100", name: "ctrl-01" }
+      - { mac: "52:54:00:75:a2:fd", ip: "192.168.101.101", name: "cmp-01" }
+      - { mac: "52:54:00:df:0f:f3", ip: "192.168.101.102", name: "cmp-02" }
+      - { mac: "52:54:00:41:5e:eb", ip: "192.168.101.103", name: "cmp-03" }
+
+  # Provider network (internal only)
+  - name: provider
+    forward_mode: isolated
+    bridge: virbr-provider
+    cidr: 192.168.102.0/24
+    dhcp: { start: 192.168.102.200, end: 192.168.102.254 }
+    hosts:
+      - { mac: "52:54:00:f9:5f:b1", ip: "192.168.102.100", name: "ctrl-01" }
+      - { mac: "52:54:00:00:48:ad", ip: "192.168.102.101", name: "cmp-01" }
+      - { mac: "52:54:00:0d:f7:6b", ip: "192.168.102.102", name: "cmp-02" }
+      - { mac: "52:54:00:37:d6:81", ip: "192.168.102.103", name: "cmp-03" }
+
+# Pools
+libvirt_pools:
+  - { name: default, type: dir, target: /var/lib/libvirt/images, autostart: true }
+  - { name: nvme,    type: dir, target: /var/lib/libvirt/nvme,   autostart: true }
+
+# VM defaults
+vm_defaults:
+  pool: nvme
+  format: qcow2
+  cpu_mode: host-passthrough
+  username: ansible
+  timezone: Europe/London
+
+# VMs (attach to libvirt networks by name)
+vms:
+  - name: ctrl-01
+    vcpus: 16
+    ram_mb: 65536
+    disks:
+      - { name: root, size_gb: 200 }
+      - { name: cinder-lvm, size_gb: 500 }
+    nets:
+      - { network: mgmt,    mac: "52:54:00:f2:7b:14", ip: "192.168.100.100/24", gw: "192.168.100.1", dns: ["192.168.100.1"] }
+      - { network: storage, mac: "52:54:00:d3:4c:09", ip: "192.168.101.100/24" }
+      - { network: provider,mac: "52:54:00:f9:5f:b1", ip: "192.168.102.100/24" }
+    cloud_init:
+      packages: [python3, podman, lvm2, tuned, firewalld]
+      runcmd:
+        - ["tuned-adm", "profile", "virtual-guest"]
+        - ["systemctl", "enable", "--now", "firewalld"]
+        - ["pvcreate", "/dev/vdb"]
+        - ["vgcreate", "cinder-volumes", "/dev/vdb"]
+
+  - name: cmp-01
+    vcpus: 8
+    ram_mb: 32768
+    disks: [ { name: root, size_gb: 100 } ]
+    nets:
+      - { network: mgmt,    mac: "52:54:00:f4:53:f8", ip: "192.168.100.101/24", gw: "192.168.100.1", dns: ["192.168.100.1"] }
+      - { network: storage, mac: "52:54:00:75:a2:fd", ip: "192.168.101.101/24" }
+      - { network: provider,mac: "52:54:00:00:48:ad", ip: "192.168.102.101/24" }
+    cloud_init:
+      packages: [python3, qemu-kvm, libvirt, tuned]
+      runcmd:
+        - ["tuned-adm","profile","virtual-guest"]
+        - ["systemctl","enable","--now","libvirtd"]
+
+  - name: cmp-02
+    vcpus: 8
+    ram_mb: 32768
+    disks: [ { name: root, size_gb: 100 } ]
+    nets:
+      - { network: mgmt,    mac: "52:54:00:a4:0d:fd", ip: "192.168.100.102/24", gw: "192.168.100.1", dns: ["192.168.100.1"] }
+      - { network: storage, mac: "52:54:00:df:0f:f3", ip: "192.168.101.102/24" }
+      - { network: provider,mac: "52:54:00:0d:f7:6b", ip: "192.168.102.102/24" }
+    cloud_init:
+      packages: [python3, qemu-kvm, libvirt, tuned]
+      runcmd:
+        - ["tuned-adm","profile","virtual-guest"]
+        - ["systemctl","enable","--now","libvirtd"]
+
+  - name: cmp-03
+    vcpus: 8
+    ram_mb: 32768
+    disks: [ { name: root, size_gb: 100 } ]
+    nets:
+      - { network: mgmt,    mac: "52:54:00:90:96:c4", ip: "192.168.100.103/24", gw: "192.168.100.1", dns: ["192.168.100.1"] }
+      - { network: storage, mac: "52:54:00:41:5e:eb", ip: "192.168.101.103/24" }
+      - { network: provider,mac: "52:54:00:37:d6:81", ip: "192.168.102.103/24" }
+    cloud_init:
+      packages: [python3, qemu-kvm, libvirt, tuned]
+      runcmd:
+        - ["tuned-adm","profile","virtual-guest"]
+        - ["systemctl","enable","--now","libvirtd"]

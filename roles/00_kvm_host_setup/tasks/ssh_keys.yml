@@ -1,0 +1,26 @@
+---
+- name: Create .ssh directory for ansible user
+  ansible.builtin.file:
+    path: "{{ vm_key_dir }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ vm_key_user }}"
+    group: "{{ vm_key_user }}"
+
+- name: Generate ed25519 SSH keypair
+  community.crypto.openssh_keypair:
+    owner: "{{ vm_key_user }}"
+    group: "{{ vm_key_user }}"
+    path: "{{ vm_key_priv }}"
+    type: ed25519
+    state: present
+    mode: "0600"
+
+- name: Read public key for VM injection
+  ansible.builtin.slurp:
+    src: "{{ vm_key_pub }}"
+  register: pubkey_raw
+
+- name: Set public key fact
+  ansible.builtin.set_fact:
+    vm_ssh_authorized_key: "{{ pubkey_raw.content | b64decode | trim }}"

@@ -1,0 +1,16 @@
+---
+- name: Import Kolla-Ansible installation tasks
+  ansible.builtin.import_tasks: install_kolla.yml
+  tags: [install]
+
+- name: Import configuration generation tasks
+  ansible.builtin.import_tasks: generate_configs.yml
+  tags: [config]
+
+- name: Import SSH key distribution tasks
+  ansible.builtin.import_tasks: ssh_keys.yml
+  tags: [ssh]
+
+- name: Import validation tasks
+  ansible.builtin.import_tasks: validate.yml
+  tags: [validate]

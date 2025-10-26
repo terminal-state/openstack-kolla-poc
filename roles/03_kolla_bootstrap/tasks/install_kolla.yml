@@ -1,0 +1,147 @@
+---
+- name: Install required system packages
+  ansible.builtin.dnf:
+    name:
+      - python3.11
+      - python3.11-devel
+      - gcc
+      - make
+      - libffi-devel
+      - openssl-devel
+      - git
+    state: present
+  register: sys_packages
+  retries: "{{ max_retries }}"
+  delay: "{{ retry_delay }}"
+  until: sys_packages is succeeded
+
+- name: Create virtual environment for Kolla-Ansible
+  ansible.builtin.command:
+    cmd: python3.11 -m venv /home/ansible/kolla-venv
+    creates: /home/ansible/kolla-venv
+
+- name: Ensure venv ownership
+  ansible.builtin.file:
+    path: /home/ansible/kolla-venv
+    owner: ansible
+    group: ansible
+    recurse: true
+
+- name: Upgrade pip in venv
+  ansible.builtin.pip:
+    name:
+      - pip
+      - setuptools
+      - wheel
+    state: latest
+    virtualenv: /home/ansible/kolla-venv
+  become: true
+  become_user: ansible
+
+- name: Install Kolla-Ansible and dependencies
+  ansible.builtin.pip:
+    name:
+      - "ansible-core"
+      - "git+https://opendev.org/openstack/kolla-ansible@stable/{{ openstack_release }}"
+      - "python-openstackclient"
+      - "python-neutronclient"
+      - "python-cinderclient"
+      - "python-glanceclient"
+      - "python-novaclient"
+    virtualenv: /home/ansible/kolla-venv
+    state: present
+  become: true
+  become_user: ansible
+  register: kolla_install
+  retries: 3
+  delay: 30
+  until: kolla_install is succeeded
+
+- name: Create Kolla config directory
+  ansible.builtin.file:
+    path: /etc/kolla
+    state: directory
+    owner: ansible
+    group: ansible
+    mode: "0755"
+
+- name: Run kolla-ansible install-deps
+  ansible.builtin.command:
+    cmd: /home/ansible/kolla-venv/bin/kolla-ansible install-deps
+  environment:
+    PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
+  become: true
+  become_user: ansible
+  register: install_deps
+  changed_when: "'changed' in install_deps.stdout"
+
+- name: Create Ansible collections directory
+  ansible.builtin.file:
+    path: /home/ansible/kolla-venv/collections
+    state: directory
+    owner: ansible
+    group: ansible
+    mode: "0755"
+
+- name: Install all required Ansible collections inside venv
+  ansible.builtin.command:
+    cmd: >
+      /home/ansible/kolla-venv/bin/ansible-galaxy collection install {{ item }} --collections-path /home/ansible/kolla-venv/collections
+  environment:
+    PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
+  become: true
+  become_user: ansible
+  loop:
+    - ansible.utils
+    - ansible.posix
+    - community.general
+    - community.crypto
+    - community.docker
+    - community.network
+    - containers.podman
+    - openvswitch.openvswitch
+  register: collection_install
+  changed_when: "'installed' in collection_install.stdout"
+  tags: [collections]
+
+- name: Create ansible.cfg for kolla-ansible in venv
+  ansible.builtin.copy:
+    dest: /home/ansible/kolla-venv/ansible.cfg
+    content: |
+      [defaults]
+      collections_path = /home/ansible/kolla-venv/collections:/usr/share/ansible/collections
+      host_key_checking = False
+      pipelining = True
+      forks = 100
+      log_path = /var/log/kolla/ansible.log
+      
+      [privilege_escalation]
+      become = True
+      become_method = sudo
+      become_user = root
+      become_ask_pass = False
+    owner: ansible
+    group: ansible
+    mode: "0644"
+
+- name: Create ansible.cfg symlink in home directory
+  ansible.builtin.file:
+    src: /home/ansible/kolla-venv/ansible.cfg
+    dest: /home/ansible/.ansible.cfg
+    state: link
+    owner: ansible
+    group: ansible
+
+- name: Install openstack.kolla collection
+  ansible.builtin.command:
+    cmd: >
+      /home/ansible/kolla-venv/bin/ansible-galaxy collection install
+      git+https://opendev.org/openstack/ansible-collection-kolla.git,stable/{{ openstack_release }}
+      --collections-path /home/ansible/kolla-venv/collections --force
+  environment:
+    PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
+    ANSIBLE_CONFIG: "/home/ansible/kolla-venv/ansible.cfg"
+  become: true
+  become_user: ansible
+  register: kolla_collection
+  changed_when: "'installed' in kolla_collection.stdout"

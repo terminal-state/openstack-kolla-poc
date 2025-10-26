@@ -1,0 +1,34 @@
+#cloud-config
+users:
+  - default
+  - name: rocky
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - {{ vm_ssh_authorized_key }}
+  - name: {{ vm_defaults.username }}
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - {{ vm_ssh_authorized_key }}
+ssh_pwauth: false
+chpasswd: { expire: False }
+package_update: true
+package_upgrade: true
+packages:
+{% for p in (vm_here.cloud_init.packages | default([])) %}
+  - {{ p }}
+{% endfor %}
+write_files:
+  - path: /etc/motd
+    content: |
+      {{ vm_here.name }} provisioned by Ansible (vm_factory)
+runcmd:
+{% for rc in (vm_here.cloud_init.runcmd | default([])) %}
+  - {{ rc | to_json }}
+{% endfor %}
+  - [ "nmcli", "networking", "off" ]
+  - [ "nmcli", "con", "reload" ]
+  - [ "nmcli", "networking", "on" ]
+timezone: {{ vm_defaults.timezone }}
+final_message: "The system is finally up, after $UPTIME seconds"

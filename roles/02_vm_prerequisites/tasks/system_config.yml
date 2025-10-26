@@ -1,0 +1,63 @@
+---
+- name: Ensure /etc/hosts has all nodes
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: ".*\\s+{{ item }}$"
+    line: "{{ hostvars[item].ansible_host }} {{ item }}"
+    state: present
+  loop: "{{ groups['vms'] }}"
+
+- name: Disable SELinux
+  ansible.posix.selinux:
+    state: disabled
+  register: selinux_disabled
+
+- name: Stop and disable firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Load br_netfilter module
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+    persistent: present
+
+- name: Configure kernel parameters for OpenStack
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-openstack.conf
+    reload: true
+  loop:
+    - { key: 'net.ipv4.ip_forward', value: '1' }
+    - { key: 'net.ipv4.conf.all.rp_filter', value: '0' }
+    - { key: 'net.ipv4.conf.default.rp_filter', value: '0' }
+    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+
+- name: Install Python dbus for kolla systemd integration
+  ansible.builtin.dnf:
+    name:
+      - python3-dbus
+      - dbus
+    state: present
+
+
+- name: Stop and disable host libvirt services (conflicts with containerized libvirt)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - libvirtd
+    - libvirtd.socket
+    - libvirtd-ro.socket
+    - libvirtd-admin.socket
+    - virtlogd.socket
+    - virtlogd-admin.socket
+  failed_when: false
+  when: "'compute' in group_names"

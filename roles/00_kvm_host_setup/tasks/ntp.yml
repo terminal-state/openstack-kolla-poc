@@ -1,0 +1,26 @@
+---
+- name: Install chrony
+  ansible.builtin.dnf:
+    name: chrony
+    state: present
+
+- name: Configure chrony as NTP server
+  ansible.builtin.copy:
+    dest: /etc/chrony.conf
+    content: |
+      pool pool.ntp.org iburst
+      driftfile /var/lib/chrony/drift
+      makestep 1.0 3
+      rtcsync
+      allow 192.168.100.0/24
+      allow 192.168.101.0/24
+      allow 192.168.102.0/24
+      local stratum 10
+    mode: "0644"
+  notify: restart chronyd
+
+- name: Enable and start chronyd
+  ansible.builtin.systemd:
+    name: chronyd
+    enabled: true
+    state: started

@@ -1,0 +1,32 @@
+---
+- name: Bootstrap Kolla-Ansible on control node
+  hosts: control
+  become: true
+  tags: [bootstrap]
+  
+  pre_tasks:
+    - name: Verify control node is accessible
+      ansible.builtin.ping:
+    
+    - name: Display bootstrap information
+      ansible.builtin.debug:
+        msg: "Bootstrapping Kolla-Ansible on {{ inventory_hostname }}"
+  
+  roles:
+    - role: 03_kolla_bootstrap
+
+- name: Deploy OpenStack services
+  hosts: control
+  become: false
+  tags: [deploy]
+  
+  roles:
+    - role: 04_kolla_deploy
+
+- name: Initialize OpenStack
+  hosts: control
+  become: false
+  tags: [init]
+  
+  roles:
+    - role: 05_openstack_init

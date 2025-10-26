@@ -1,0 +1,33 @@
+---
+- name: Verify all required files exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: required_files
+  loop:
+    - /etc/kolla/passwords.yml
+    - /etc/kolla/globals.yml
+    - /etc/ansible/inventory/kolla.ini
+    - /home/ansible/kolla-venv/bin/kolla-ansible
+  failed_when: not required_files.stat.exists
+
+- name: Test SSH connectivity to all nodes
+  ansible.builtin.command:
+    cmd: ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no ansible@{{ item }} hostname
+  loop: "{{ groups['vms'] }}"
+  register: ssh_test
+  changed_when: false
+  become: true
+  become_user: ansible
+  retries: 3
+  delay: 10
+  until: ssh_test is succeeded
+
+- name: Display bootstrap completion message
+  ansible.builtin.debug:
+    msg:
+      - "============================================"
+      - "Kolla-Ansible bootstrap completed successfully"
+      - "Virtual environment: /home/ansible/kolla-venv"
+      - "Configuration: /etc/kolla/"
+      - "Inventory: /etc/ansible/inventory/kolla.ini"
+      - "============================================"

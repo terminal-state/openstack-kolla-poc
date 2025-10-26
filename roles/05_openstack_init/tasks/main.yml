@@ -1,0 +1,16 @@
+---
+- name: Import network initialization tasks
+  ansible.builtin.import_tasks: init_networks.yml
+  tags: [networks]
+
+- name: Import image upload tasks
+  ansible.builtin.import_tasks: init_images.yml
+  tags: [images]
+
+- name: Import flavor creation tasks
+  ansible.builtin.import_tasks: init_flavors.yml
+  tags: [flavors]
+
+- name: Import project initialization tasks
+  ansible.builtin.import_tasks: init_projects.yml
+  tags: [projects]
