@@ -14,3 +14,17 @@
 - name: Import validation tasks
   ansible.builtin.import_tasks: validate.yml
   tags: [validate]
+
+- name: Create Kolla config override directory
+  ansible.builtin.file:
+    path: /etc/kolla/config/nova
+    state: directory
+    mode: '0755'
+
+- name: Override nova CPU mode for nested virtualization
+  ansible.builtin.copy:
+    content: |
+      [libvirt]
+      cpu_mode = none
+    dest: /etc/kolla/config/nova.conf
+    mode: '0644'

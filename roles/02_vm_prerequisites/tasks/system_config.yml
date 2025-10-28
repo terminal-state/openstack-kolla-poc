@@ -88,3 +88,64 @@
     state: stopped
     enabled: false
   failed_when: false
+
+- name: Install iSCSI initiator packages
+  ansible.builtin.dnf:
+    name:
+      - iscsi-initiator-utils
+      - lsscsi
+    state: present
+  when: "'compute' in group_names"
+
+- name: Generate unique iSCSI initiator name
+  ansible.builtin.shell: |
+    if [ ! -f /etc/iscsi/initiatorname.iscsi ]; then
+      echo "InitiatorName=$(iscsi-iname)" > /etc/iscsi/initiatorname.iscsi
+    fi
+  args:
+    creates: /etc/iscsi/initiatorname.iscsi
+  when: "'compute' in group_names"
+
+- name: Enable and start iscsid service
+  ansible.builtin.systemd:
+    name: iscsid
+    enabled: true
+    state: started
+  when: "'compute' in group_names"
+
+- name: Install iSCSI initiator packages
+  ansible.builtin.dnf:
+    name:
+      - iscsi-initiator-utils
+      - lsscsi
+    state: present
+  when: "'compute' in group_names"
+
+- name: Generate unique iSCSI initiator name
+  ansible.builtin.shell: |
+    if [ ! -f /etc/iscsi/initiatorname.iscsi ]; then
+      echo "InitiatorName=$(iscsi-iname)" > /etc/iscsi/initiatorname.iscsi
+    fi
+  args:
+    creates: /etc/iscsi/initiatorname.iscsi
+  when: "'compute' in group_names"
+
+- name: Enable and start iscsid service
+  ansible.builtin.systemd:
+    name: iscsid
+    enabled: true
+    state: started
+  when: "'compute' in group_names"
+
+- name: Ensure iscsi_info Docker volume exists
+  ansible.builtin.command: docker volume create iscsi_info
+  failed_when: false
+  when: "'compute' in group_names"
+
+- name: Copy initiator name to Docker volume for Kolla
+  ansible.builtin.copy:
+    src: /etc/iscsi/initiatorname.iscsi
+    dest: /var/lib/docker/volumes/iscsi_info/_data/initiatorname.iscsi
+    remote_src: true
+    mode: '0600'
+  when: "'compute' in group_names"
