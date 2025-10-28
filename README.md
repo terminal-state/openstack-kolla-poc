@@ -327,3 +327,259 @@ This is a **PoC environment** for testing and development. Before production:
 ## License
 
 This project is provided as-is for educational and testing purposes.
+
+## Post-Deployment: Creating a Test Project
+
+After deployment completes, run these commands to set up a test project with networking:
+
+### 1. Create Test Project and User
+```bash
+ssh -i /home/ansible/.ssh/id_ed25519 ansible@192.168.100.100
+source /home/ansible/kolla-venv/bin/activate
+source /etc/kolla/admin-openrc.sh
+
+# Create test project
+openstack project create --description "Test Project" test-project
+
+# Create test user
+openstack user create --project test-project --password testpass test-user
+
+# Assign member role
+openstack role add --project test-project --user test-user member
+```
+
+### 2. Create Flavor
+```bash
+# Create small flavor: 2 vCPU, 4GB RAM, 20GB disk
+openstack flavor create --vcpus 2 --ram 4096 --disk 20 test-flavor
+```
+
+### 3. Create Networks
+```bash
+# Create private network
+openstack network create --project test-project private-network
+openstack subnet create --project test-project \
+  --network private-network \
+  --subnet-range 10.1.0.0/24 \
+  --dns-nameserver 8.8.8.8 \
+  private-subnet
+
+# Create external/public network (admin only)
+openstack network create --external \
+  --provider-physical-network physnet1 \
+  --provider-network-type flat \
+  public-network
+
+openstack subnet create --network public-network \
+  --subnet-range 192.168.102.0/24 \
+  --allocation-pool start=192.168.102.150,end=192.168.102.199 \
+  --gateway 192.168.102.1 \
+  --dns-nameserver 8.8.8.8 \
+  --no-dhcp \
+  public-subnet
+```
+
+### 4. Create Router
+```bash
+# Create router in test project
+openstack router create --project test-project test-router
+
+# Connect router to private network
+openstack router add subnet test-router private-subnet
+
+# Set external gateway
+openstack router set --external-gateway public-network test-router
+```
+
+### 5. Configure Security Group
+```bash
+# Get default security group ID for test project
+PROJECT_ID=$(openstack project show test-project -f value -c id)
+SG_ID=$(openstack security group list --project $PROJECT_ID -f value -c ID)
+
+# Allow SSH from anywhere
+openstack security group rule create --project test-project \
+  --protocol tcp --dst-port 22 --remote-ip 0.0.0.0/0 $SG_ID
+
+# Allow ICMP (ping)
+openstack security group rule create --project test-project \
+  --protocol icmp $SG_ID
+
+# Allow all egress traffic (usually default, but ensure it exists)
+openstack security group rule create --project test-project \
+  --egress --protocol any $SG_ID
+```
+
+### 6. Upload Test Image
+```bash
+# Download CentOS Stream 9 cloud image
+wget https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2
+
+# Upload to Glance in test project
+openstack image create --project test-project \
+  --disk-format qcow2 \
+  --container-format bare \
+  --public \
+  --file CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2 \
+  centos-stream-9
+```
+
+### 7. Create SSH Keypair
+```bash
+# Generate keypair for test project
+ssh-keygen -t ed25519 -f ~/.ssh/test-key -N ""
+
+# Import to OpenStack
+openstack keypair create --project test-project \
+  --public-key ~/.ssh/test-key.pub \
+  test-key
+```
+
+## Launching Your First Instance
+
+Now you can launch an instance as the test user:
+
+### Via CLI
+```bash
+# Switch to test user credentials
+cat > /tmp/test-openrc.sh << ENVEOF
+export OS_PROJECT_DOMAIN_NAME=Default
+export OS_USER_DOMAIN_NAME=Default
+export OS_PROJECT_NAME=test-project
+export OS_USERNAME=test-user
+export OS_PASSWORD=testpass
+export OS_AUTH_URL=http://192.168.100.200:5000/v3
+export OS_IDENTITY_API_VERSION=3
+export OS_REGION_NAME=RegionOne
+export OS_INTERFACE=internal
+ENVEOF
+
+source /tmp/test-openrc.sh
+
+# Get network ID
+NETWORK_ID=$(openstack network list --name private-network -f value -c ID)
+
+# Launch instance
+openstack server create \
+  --flavor test-flavor \
+  --image centos-stream-9 \
+  --network $NETWORK_ID \
+  --key-name test-key \
+  --security-group default \
+  test-instance-01
+
+# Wait for instance to become ACTIVE
+openstack server list
+
+# Create and associate floating IP
+FLOATING_IP=$(openstack floating ip create public-network -f value -c floating_ip_address)
+openstack server add floating ip test-instance-01 $FLOATING_IP
+
+echo "Instance accessible at: $FLOATING_IP"
+```
+
+### Via Horizon Dashboard
+
+1. Login to Horizon: http://192.168.100.200
+   - Username: `test-user`
+   - Password: `testpass`
+   - Domain: `Default`
+
+2. Navigate to **Project > Compute > Instances**
+
+3. Click **Launch Instance**:
+   - **Details**: Name: `test-instance-01`
+   - **Source**: Select `centos-stream-9` image, Boot Source: Image
+   - **Flavor**: Select `test-flavor`
+   - **Networks**: Select `private-network`
+   - **Key Pair**: Select `test-key`
+   - **Security Groups**: Select `default`
+
+4. Click **Launch Instance**
+
+5. Once ACTIVE, go to **Project > Network > Floating IPs**
+
+6. Click **Allocate IP to Project**, select `public-network`
+
+7. Click **Associate** next to the floating IP
+
+8. Select your instance and click **Associate**
+
+### Access Your Instance
+
+From the KVM host (arrakis):
+```bash
+# SSH to instance using floating IP
+ssh -i ~/.ssh/test-key centos@<floating-ip>
+```
+
+The instance will have:
+- Private IP: 10.1.0.x (on private-network)
+- Floating IP: 192.168.102.x (accessible from KVM host)
+- Internet access via router NAT
+
+## Network Architecture
+```
+KVM Host (192.168.100.1)
+    |
+    +-- Management Network (192.168.100.0/24)
+    |   |-- ctrl-01: 192.168.100.100
+    |   |-- cmp-01: 192.168.100.101
+    |   |-- cmp-02: 192.168.100.102
+    |   +-- cmp-03: 192.168.100.103
+    |
+    +-- Storage Network (192.168.101.0/24)
+    |   |-- ctrl-01: 192.168.101.100
+    |   +-- cmp-0x: 192.168.101.10x
+    |
+    +-- Provider Network (192.168.102.0/24)
+        |-- Gateway: 192.168.102.1
+        |-- Floating IP Pool: 192.168.102.150-199
+        +-- VM Floating IPs accessible from host
+
+OpenStack Networks:
+    +-- private-network (10.1.0.0/24)
+        |-- VM private IPs
+        |-- Connected to test-router
+        +-- NAT to public-network
+
+    +-- public-network (192.168.102.0/24)
+        |-- External/Provider network
+        |-- Floating IP allocation pool
+        +-- Routed to KVM host network
+```
+
+## Quick Reference Commands
+
+### Check Service Status
+```bash
+ssh ansible@192.168.100.100
+source /etc/kolla/admin-openrc.sh
+
+openstack compute service list    # Nova services
+openstack network agent list       # Neutron agents
+openstack volume service list      # Cinder services
+openstack hypervisor list          # Compute nodes
+```
+
+### View Resources
+```bash
+openstack server list              # Instances
+openstack network list             # Networks
+openstack floating ip list         # Floating IPs
+openstack volume list              # Volumes
+openstack image list               # Images
+```
+
+### Troubleshoot Instance Issues
+```bash
+# View instance console log
+openstack console log show <instance-name>
+
+# View instance details
+openstack server show <instance-name>
+
+# Check compute node logs
+ssh ansible@192.168.100.101
+sudo tail -f /var/lib/docker/volumes/kolla_logs/_data/nova/nova-compute.log
+```
