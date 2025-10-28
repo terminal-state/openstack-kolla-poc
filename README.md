@@ -41,14 +41,14 @@ git clone https://github.com/terminal-state/openstack-kolla-poc.git openstack-ko
 cd openstack-kolla
 
 # Run full deployment (skip prechecks due to known false positives)
-ansible-playbook -i ../inventory/hosts.ini site.yml --skip-tags prechecks
+ansible-playbook -i inventory/hosts.ini site.yml --skip-tags prechecks
 ```
 
 **Note**: The deployment skips Kolla prechecks because they produce false positives for libvirt socket files on compute nodes. The host libvirt is properly stopped, but socket files remain, causing harmless warnings.
 
 Validate deployment:
 ```bash
-ansible-playbook -i ../inventory/hosts.ini site.yml --tags init
+ansible-playbook -i inventory/hosts.ini site.yml --tags init
 ```
 
 **Total deployment time**: ~30-45 minutes
@@ -59,7 +59,7 @@ ansible-playbook -i ../inventory/hosts.ini site.yml --tags init
 tmux new -s openstack
 
 # Run deployment
-ansible-playbook -i ../inventory/hosts.ini site.yml --skip-tags prechecks
+ansible-playbook -i inventory/hosts.ini site.yml --skip-tags prechecks
 
 # Detach from session: Ctrl+b, then d
 # Reattach later: tmux attach -s openstack
@@ -144,17 +144,17 @@ Run individual phases if needed:
 
 ### Deploy VMs Only
 ```bash
-ansible-playbook -i ../inventory/hosts.ini deploy_vms.yml
+ansible-playbook -i inventory/hosts.ini deploy_vms.yml
 ```
 
 ### Deploy OpenStack Only (VMs must exist)
 ```bash
-ansible-playbook -i ../inventory/hosts.ini deploy_openstack.yml --tags bootstrap,deploy
+ansible-playbook -i inventory/hosts.ini deploy_openstack.yml --tags bootstrap,deploy
 ```
 
 ### Validate Existing Deployment
 ```bash
-ansible-playbook -i ../inventory/hosts.ini site.yml --tags init
+ansible-playbook -i inventory/hosts.ini site.yml --tags init
 ```
 
 ## Clean Rebuild
@@ -176,7 +176,7 @@ ls /var/lib/libvirt/images/
 
 # Redeploy from scratch
 cd /etc/ansible/openstack-kolla
-ansible-playbook -i ../inventory/hosts.ini site.yml --skip-tags prechecks
+ansible-playbook -i inventory/hosts.ini site.yml --skip-tags prechecks
 ```
 
 ## Project Structure
