@@ -15,11 +15,43 @@
     var: openstack_env
 
 - name: Verify OpenStack services are operational
-  ansible.builtin.command: openstack service list
-  environment: "{{ openstack_env }}"
+  ansible.builtin.shell: |
+    source /home/ansible/kolla-venv/bin/activate
+    source /etc/kolla/admin-openrc.sh
+    openstack service list
   register: service_list
   changed_when: false
+  become: true
+  become_user: ansible
 
 - name: Display OpenStack services
   ansible.builtin.debug:
     var: service_list.stdout_lines
+
+- name: Verify compute services
+  ansible.builtin.shell: |
+    source /home/ansible/kolla-venv/bin/activate
+    source /etc/kolla/admin-openrc.sh
+    openstack compute service list
+  register: compute_services
+  changed_when: false
+  become: true
+  become_user: ansible
+
+- name: Display compute services
+  ansible.builtin.debug:
+    var: compute_services.stdout_lines
+
+- name: Verify network agents
+  ansible.builtin.shell: |
+    source /home/ansible/kolla-venv/bin/activate
+    source /etc/kolla/admin-openrc.sh
+    openstack network agent list
+  register: network_agents
+  changed_when: false
+  become: true
+  become_user: ansible
+
+- name: Display network agents
+  ansible.builtin.debug:
+    var: network_agents.stdout_lines
