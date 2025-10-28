@@ -89,6 +89,8 @@
       /home/ansible/kolla-venv/bin/ansible-galaxy collection install {{ item }} --collections-path /home/ansible/kolla-venv/collections
   environment:
     PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
+    ANSIBLE_CONFIG: "/home/ansible/kolla-venv/ansible.cfg"
+    ANSIBLE_COLLECTIONS_PATH: "/home/ansible/kolla-venv/collections"
   become: true
   become_user: ansible
   loop:

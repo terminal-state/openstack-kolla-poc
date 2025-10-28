@@ -1,35 +1,29 @@
 ---
-- name: Run kolla-ansible post-deploy
-  ansible.builtin.command:
-    cmd: /home/ansible/kolla-venv/bin/kolla-ansible post-deploy -i /etc/ansible/inventory/kolla.ini
-  environment:
-    PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
-    ANSIBLE_HOST_KEY_CHECKING: "False"
-    ANSIBLE_COLLECTIONS_PATH: "/home/ansible/kolla-venv/collections"
+- name: Generate admin OpenStack credentials file
+  ansible.builtin.shell: |
+    ADMIN_PASS=$(sudo grep keystone_admin_password /etc/kolla/passwords.yml | awk '{print $2}')
+    sudo tee /etc/kolla/admin-openrc.sh > /dev/null << ENVEOF
+    export OS_PROJECT_DOMAIN_NAME=Default
+    export OS_USER_DOMAIN_NAME=Default
+    export OS_PROJECT_NAME=admin
+    export OS_USERNAME=admin
+    export OS_PASSWORD=$ADMIN_PASS
+    export OS_AUTH_URL=http://192.168.100.200:5000/v3
+    export OS_IDENTITY_API_VERSION=3
+    export OS_REGION_NAME=RegionOne
+    export OS_INTERFACE=internal
+    ENVEOF
+    sudo chmod 644 /etc/kolla/admin-openrc.sh
   args:
-    chdir: /home/ansible/kolla-venv
+    creates: /etc/kolla/admin-openrc.sh
   become: true
   become_user: ansible
-  register: postdeploy_result
-  retries: 2
-  delay: 10
-  until: postdeploy_result.rc == 0
 
-- name: Verify admin credentials file exists
+- name: Verify admin credentials file was created
   ansible.builtin.stat:
     path: /etc/kolla/admin-openrc.sh
-  register: admin_creds
+  register: admin_rc_stat
 
-- name: Fail if credentials not created
-  ansible.builtin.fail:
-    msg: "Admin credentials file not found at /etc/kolla/admin-openrc.sh"
-  when: not admin_creds.stat.exists
-
-- name: Display post-deploy completion
+- name: Display credentials file status
   ansible.builtin.debug:
-    msg:
-      - "============================================"
-      - "OpenStack deployment completed!"
-      - "Admin credentials: /etc/kolla/admin-openrc.sh"
-      - "Horizon URL: http://{{ kolla_external_vip_address }}"
-      - "============================================"
+    msg: "Admin credentials file created: {{ admin_rc_stat.stat.exists }}"

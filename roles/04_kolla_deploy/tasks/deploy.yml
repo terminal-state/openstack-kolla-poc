@@ -1,10 +1,27 @@
 ---
+- name: Remove /var/log/kolla directory if it exists
+  ansible.builtin.file:
+    path: /var/log/kolla
+    state: absent
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['vms'] }}"
+
+- name: Fix Docker volume permissions
+  ansible.builtin.shell: |
+    docker volume create kolla_logs 2>/dev/null || true
+    chmod 777 /var/lib/docker/volumes/kolla_logs/_data
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['vms'] }}"
+
 - name: Run kolla-ansible bootstrap-servers
   ansible.builtin.command:
     cmd: /home/ansible/kolla-venv/bin/kolla-ansible bootstrap-servers -i /etc/ansible/inventory/kolla.ini
   environment:
     PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
     ANSIBLE_CONFIG: "/home/ansible/kolla-venv/ansible.cfg"
+    ANSIBLE_COLLECTIONS_PATH: "/home/ansible/kolla-venv/collections"
   args:
     chdir: /home/ansible/kolla-venv
   become: true
@@ -24,6 +41,7 @@
   environment:
     PATH: "/home/ansible/kolla-venv/bin:{{ ansible_env.PATH }}"
     ANSIBLE_CONFIG: "/home/ansible/kolla-venv/ansible.cfg"
+    ANSIBLE_COLLECTIONS_PATH: "/home/ansible/kolla-venv/collections"
   args:
     chdir: /home/ansible/kolla-venv
   become: true
@@ -35,7 +53,7 @@
   ansible.builtin.debug:
     msg:
       - "Deployment return code: {{ deploy_result.rc }}"
-      - "Last 30 lines of output:"
+      - "Last 100 lines of output:"
       - "{{ deploy_result.stdout_lines[-100:] }}"
 
 - name: Fail if deployment failed
