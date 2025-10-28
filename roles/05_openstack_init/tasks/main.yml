@@ -1,16 +1,25 @@
 ---
-- name: Import network initialization tasks
-  ansible.builtin.import_tasks: init_networks.yml
-  tags: [networks]
+- name: Source admin credentials
+  ansible.builtin.shell: |
+    source /etc/kolla/admin-openrc.sh
+    env | grep ^OS_
+  register: admin_env
+  changed_when: false
 
-- name: Import image upload tasks
-  ansible.builtin.import_tasks: init_images.yml
-  tags: [images]
+- name: Set OpenStack environment facts
+  ansible.builtin.set_fact:
+    openstack_env: "{{ dict(admin_env.stdout_lines | map('regex_replace', '^(OS_[^=]+)=(.+)$', '\\1,\\2') | map('split', ',') | map('list')) }}"
 
-- name: Import flavor creation tasks
-  ansible.builtin.import_tasks: init_flavors.yml
-  tags: [flavors]
+- name: Display OpenStack environment
+  ansible.builtin.debug:
+    var: openstack_env
 
-- name: Import project initialization tasks
-  ansible.builtin.import_tasks: init_projects.yml
-  tags: [projects]
+- name: Verify OpenStack services are operational
+  ansible.builtin.command: openstack service list
+  environment: "{{ openstack_env }}"
+  register: service_list
+  changed_when: false
+
+- name: Display OpenStack services
+  ansible.builtin.debug:
+    var: service_list.stdout_lines

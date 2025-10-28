@@ -61,3 +61,30 @@
     - virtlogd-admin.socket
   failed_when: false
   when: "'compute' in group_names"
+
+- name: Remove libvirt socket files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/run/libvirt/libvirt-sock
+    - /var/run/libvirt/libvirt-sock-ro
+    - /var/run/libvirt/libvirt-admin-sock
+  failed_when: false
+  when: "'compute' in group_names"
+
+- name: Open RabbitMQ port in firewall on control nodes
+  ansible.posix.firewalld:
+    port: 5672/tcp
+    permanent: true
+    state: enabled
+    immediate: true
+  when: "'control' in group_names"
+  failed_when: false
+
+- name: Disable firewalld for PoC
+  ansible.builtin.systemd:
+    name: firewalld
+    state: stopped
+    enabled: false
+  failed_when: false
