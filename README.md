@@ -22,7 +22,7 @@ Complete automation for deploying OpenStack 2025.1 using Kolla-Ansible on KVM vi
 
 ## Prerequisites
 
-- Rocky Linux 9 or AlmaLinux 9 as KVM host
+- Rocky Linux 9 KVM host (AlmaLinux is NOT SUPPORTED)
 - Minimum resources:
   - CPU: 48+ cores (16 + 8×3 + overhead)
   - RAM: 128GB+ (64 + 32×3 + overhead)
