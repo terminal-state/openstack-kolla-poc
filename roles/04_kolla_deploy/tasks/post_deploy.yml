@@ -44,3 +44,34 @@
   loop: "{{ groups['compute'] }}"
   when: groups['compute'] is defined
   failed_when: false
+
+- name: Fix nova CPU configuration on compute nodes for nested virtualization
+  ansible.builtin.shell: |
+    # Replace cpu_mode if it exists, otherwise add it
+    if grep -q "^cpu_mode = " /etc/kolla/nova-compute/nova.conf; then
+      sed -i 's/^cpu_mode = .*/cpu_mode = custom/' /etc/kolla/nova-compute/nova.conf
+    else
+      sed -i '/^\[libvirt\]/a cpu_mode = custom' /etc/kolla/nova-compute/nova.conf
+    fi
+    
+    # Replace cpu_model if it exists, otherwise add it
+    if grep -q "^cpu_model = " /etc/kolla/nova-compute/nova.conf; then
+      sed -i 's/^cpu_model = .*/cpu_model = Nehalem/' /etc/kolla/nova-compute/nova.conf
+    else
+      sed -i '/^cpu_mode = custom/a cpu_model = Nehalem' /etc/kolla/nova-compute/nova.conf
+    fi
+    
+    # Remove cpu_models if present (plural form is invalid)
+    sed -i '/^cpu_models = /d' /etc/kolla/nova-compute/nova.conf
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['compute'] }}"
+  when: groups['compute'] is defined
+
+- name: Restart nova-compute containers after CPU mode fix
+  ansible.builtin.command: docker restart nova_compute
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['compute'] }}"
+  when: groups['compute'] is defined
+  failed_when: false

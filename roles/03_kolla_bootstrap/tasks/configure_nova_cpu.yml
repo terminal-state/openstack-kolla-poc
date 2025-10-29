@@ -5,33 +5,8 @@
     state: directory
     mode: '0755'
 
-- name: Override nova CPU mode for nested virtualization
-  ansible.builtin.copy:
-    content: |
-      [libvirt]
-      cpu_mode = none
+- name: Deploy nova CPU configuration for nested virtualization
+  ansible.builtin.template:
+    src: config/nova.conf.j2
     dest: /etc/kolla/config/nova.conf
     mode: '0644'
-
-- name: Ensure cpu_mode is set correctly in deployed configs
-  ansible.builtin.lineinfile:
-    path: /etc/kolla/nova-compute/nova.conf
-    regexp: '^cpu_mode = '
-    line: 'cpu_mode = none'
-    insertafter: '^\[libvirt\]'
-  delegate_to: "{{ item }}"
-  loop: "{{ groups['compute'] }}"
-  when: groups['compute'] is defined
-  become: true
-  tags: [post-deploy]
-
-- name: Remove cpu_models if present (not compatible with cpu_mode=none)
-  ansible.builtin.lineinfile:
-    path: /etc/kolla/nova-compute/nova.conf
-    regexp: '^cpu_models = '
-    state: absent
-  delegate_to: "{{ item }}"
-  loop: "{{ groups['compute'] }}"
-  when: groups['compute'] is defined
-  become: true
-  tags: [post-deploy]
