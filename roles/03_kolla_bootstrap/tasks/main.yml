@@ -28,3 +28,6 @@
       cpu_mode = none
     dest: /etc/kolla/config/nova.conf
     mode: '0644'
+
+- name: Configure Nova CPU mode for nested virtualization
+  ansible.builtin.include_tasks: configure_nova_cpu.yml

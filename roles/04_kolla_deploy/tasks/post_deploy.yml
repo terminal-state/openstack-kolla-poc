@@ -27,3 +27,20 @@
 - name: Display credentials file status
   ansible.builtin.debug:
     msg: "Admin credentials file created: {{ admin_rc_stat.stat.exists }}"
+
+- name: Fix nova CPU mode on compute nodes for nested virtualization
+  ansible.builtin.shell: |
+    sed -i 's/^cpu_mode = .*/cpu_mode = none/' /etc/kolla/nova-compute/nova.conf
+    sed -i '/^cpu_models = /d' /etc/kolla/nova-compute/nova.conf
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['compute'] }}"
+  when: groups['compute'] is defined
+
+- name: Restart nova-compute containers after CPU mode fix
+  ansible.builtin.command: docker restart nova_compute
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['compute'] }}"
+  when: groups['compute'] is defined
+  failed_when: false
