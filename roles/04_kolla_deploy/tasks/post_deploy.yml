@@ -26,15 +26,6 @@
   ansible.builtin.debug:
     msg: "Admin credentials file created: {{ admin_rc_final.stat.exists }}"
 
-- name: Ensure libvirtd is running on compute nodes
-  ansible.builtin.systemd:
-    name: libvirtd
-    state: started
-    enabled: true
-  become: true
-  delegate_to: "{{ item }}"
-  loop: "{{ groups['compute'] }}"
-  when: groups['compute'] is defined
 
 - name: Fix nova CPU configuration on compute nodes for nested virtualization
   ansible.builtin.shell: |
