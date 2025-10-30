@@ -10,7 +10,7 @@
       vcpus: "{{ vm_def.vcpus }}"
       ram_mb: "{{ vm_def.ram_mb }}"
       disks: "{{ vm_def.disks }}"
-    vm_networks: "{{ vm_def.networks }}"
+    vm_networks: "{{ vm_def.nets }}"
     vm_type: control
 
 - name: Create compute node VMs
@@ -24,7 +24,7 @@
       vcpus: "{{ vm_def.vcpus }}"
       ram_mb: "{{ vm_def.ram_mb }}"
       disks: "{{ vm_def.disks }}"
-    vm_networks: "{{ vm_def.networks }}"
+    vm_networks: "{{ vm_def.nets }}"
     vm_type: compute
 
 - name: Wait for all VMs to be running
