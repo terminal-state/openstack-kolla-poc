@@ -1,4 +1,9 @@
 ---
+- name: Wait for containers to stabilize
+  ansible.builtin.pause:
+    seconds: 60
+    prompt: "Waiting for OpenStack containers to stabilize..."
+
 - name: Wait for OpenStack services to stabilize
   ansible.builtin.pause:
     seconds: 60
@@ -9,23 +14,22 @@
     path: /etc/kolla/admin-openrc.sh
   register: admin_rc_stat
 
-- name: Create admin-openrc.sh if missing
+- name: Create admin-openrc.sh manually
   ansible.builtin.shell: |
-    source /home/ansible/kolla-venv/bin/activate
-    kolla-ansible post-deploy -i /etc/ansible/inventory/kolla.ini
-  args:
-    creates: /etc/kolla/admin-openrc.sh
+    cat > /etc/kolla/admin-openrc.sh << 'RCEOF'
+    export OS_PROJECT_DOMAIN_NAME=Default
+    export OS_USER_DOMAIN_NAME=Default
+    export OS_PROJECT_NAME=admin
+    export OS_USERNAME=admin
+    export OS_PASSWORD=$(grep keystone_admin_password /etc/kolla/passwords.yml | cut -d: -f2 | tr -d " ")
+    export OS_AUTH_URL=http://192.168.100.200:5000/v3
+    export OS_IDENTITY_API_VERSION=3
+    export OS_REGION_NAME=RegionOne
+    export OS_INTERFACE=internal
+    RCEOF
+    chmod 644 /etc/kolla/admin-openrc.sh
+  become: true
   when: not admin_rc_stat.stat.exists
-
-- name: Verify admin-openrc.sh was created
-  ansible.builtin.stat:
-    path: /etc/kolla/admin-openrc.sh
-  register: admin_rc_final
-
-- name: Display admin credentials status
-  ansible.builtin.debug:
-    msg: "Admin credentials file created: {{ admin_rc_final.stat.exists }}"
-
 
 - name: Fix nova CPU configuration on compute nodes for nested virtualization
   ansible.builtin.shell: |
