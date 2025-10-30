@@ -5,8 +5,8 @@
     state: directory
     mode: '0755'
 
-- name: Deploy nova CPU configuration for nested virtualization
+- name: Deploy nova-compute CPU configuration for nested virtualization
   ansible.builtin.template:
     src: config/nova.conf.j2
-    dest: /etc/kolla/config/nova.conf
+    dest: /etc/kolla/config/nova/nova-compute.conf
     mode: '0644'
