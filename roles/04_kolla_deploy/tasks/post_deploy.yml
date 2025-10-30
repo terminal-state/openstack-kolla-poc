@@ -1,74 +1,65 @@
 ---
-- name: Generate admin OpenStack credentials file
-  ansible.builtin.shell: |
-    ADMIN_PASS=$(sudo grep keystone_admin_password /etc/kolla/passwords.yml | awk '{print $2}')
-    sudo tee /etc/kolla/admin-openrc.sh > /dev/null << ENVEOF
-    export OS_PROJECT_DOMAIN_NAME=Default
-    export OS_USER_DOMAIN_NAME=Default
-    export OS_PROJECT_NAME=admin
-    export OS_USERNAME=admin
-    export OS_PASSWORD=$ADMIN_PASS
-    export OS_AUTH_URL=http://192.168.100.200:5000/v3
-    export OS_IDENTITY_API_VERSION=3
-    export OS_REGION_NAME=RegionOne
-    export OS_INTERFACE=internal
-    ENVEOF
-    sudo chmod 644 /etc/kolla/admin-openrc.sh
-  args:
-    creates: /etc/kolla/admin-openrc.sh
-  become: true
-  become_user: ansible
+- name: Wait for OpenStack services to stabilize
+  ansible.builtin.pause:
+    seconds: 60
+    prompt: "Waiting for OpenStack services to start..."
 
-- name: Verify admin credentials file was created
+- name: Check if admin-openrc.sh exists
   ansible.builtin.stat:
     path: /etc/kolla/admin-openrc.sh
   register: admin_rc_stat
 
-- name: Display credentials file status
-  ansible.builtin.debug:
-    msg: "Admin credentials file created: {{ admin_rc_stat.stat.exists }}"
-
-- name: Fix nova CPU mode on compute nodes for nested virtualization
+- name: Create admin-openrc.sh if missing
   ansible.builtin.shell: |
-    sed -i 's/^cpu_mode = .*/cpu_mode = none/' /etc/kolla/nova-compute/nova.conf
-    sed -i '/^cpu_models = /d' /etc/kolla/nova-compute/nova.conf
-  become: true
-  delegate_to: "{{ item }}"
-  loop: "{{ groups['compute'] }}"
-  when: groups['compute'] is defined
+    source /home/ansible/kolla-venv/bin/activate
+    kolla-ansible post-deploy -i /etc/ansible/inventory/kolla.ini
+  args:
+    creates: /etc/kolla/admin-openrc.sh
+  when: not admin_rc_stat.stat.exists
 
-- name: Restart nova-compute containers after CPU mode fix
-  ansible.builtin.command: docker restart nova_compute
+- name: Verify admin-openrc.sh was created
+  ansible.builtin.stat:
+    path: /etc/kolla/admin-openrc.sh
+  register: admin_rc_final
+
+- name: Display admin credentials status
+  ansible.builtin.debug:
+    msg: "Admin credentials file created: {{ admin_rc_final.stat.exists }}"
+
+- name: Ensure libvirtd is running on compute nodes
+  ansible.builtin.systemd:
+    name: libvirtd
+    state: started
+    enabled: true
   become: true
   delegate_to: "{{ item }}"
   loop: "{{ groups['compute'] }}"
   when: groups['compute'] is defined
-  failed_when: false
 
 - name: Fix nova CPU configuration on compute nodes for nested virtualization
   ansible.builtin.shell: |
-    # Replace cpu_mode if it exists, otherwise add it
-    if grep -q "^cpu_mode = " /etc/kolla/nova-compute/nova.conf; then
-      sed -i 's/^cpu_mode = .*/cpu_mode = custom/' /etc/kolla/nova-compute/nova.conf
-    else
+    # Add cpu_mode if not present
+    if ! grep -q "^cpu_mode = " /etc/kolla/nova-compute/nova.conf; then
       sed -i '/^\[libvirt\]/a cpu_mode = custom' /etc/kolla/nova-compute/nova.conf
-    fi
-    
-    # Replace cpu_model if it exists, otherwise add it
-    if grep -q "^cpu_model = " /etc/kolla/nova-compute/nova.conf; then
-      sed -i 's/^cpu_model = .*/cpu_model = Nehalem/' /etc/kolla/nova-compute/nova.conf
     else
-      sed -i '/^cpu_mode = custom/a cpu_model = Nehalem' /etc/kolla/nova-compute/nova.conf
+      sed -i 's/^cpu_mode = .*/cpu_mode = custom/' /etc/kolla/nova-compute/nova.conf
     fi
     
-    # Remove cpu_models if present (plural form is invalid)
+    # Add cpu_model if not present
+    if ! grep -q "^cpu_model = " /etc/kolla/nova-compute/nova.conf; then
+      sed -i '/^cpu_mode = custom/a cpu_model = Nehalem' /etc/kolla/nova-compute/nova.conf
+    else
+      sed -i 's/^cpu_model = .*/cpu_model = Nehalem/' /etc/kolla/nova-compute/nova.conf
+    fi
+    
+    # Remove invalid cpu_models (plural)
     sed -i '/^cpu_models = /d' /etc/kolla/nova-compute/nova.conf
   become: true
   delegate_to: "{{ item }}"
   loop: "{{ groups['compute'] }}"
   when: groups['compute'] is defined
 
-- name: Restart nova-compute containers after CPU mode fix
+- name: Restart nova-compute containers after fixes
   ansible.builtin.command: docker restart nova_compute
   become: true
   delegate_to: "{{ item }}"
