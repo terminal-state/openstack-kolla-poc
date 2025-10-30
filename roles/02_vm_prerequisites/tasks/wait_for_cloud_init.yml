@@ -1,0 +1,14 @@
+---
+- name: Wait for cloud-init to complete
+  ansible.builtin.command: cloud-init status --wait
+  changed_when: false
+  retries: 30
+  delay: 10
+  register: cloud_init_status
+  until: cloud_init_status.rc == 0
+
+- name: Verify no package manager locks
+  ansible.builtin.wait_for:
+    path: /var/lib/rpm/.rpm.lock
+    state: absent
+    timeout: 300
