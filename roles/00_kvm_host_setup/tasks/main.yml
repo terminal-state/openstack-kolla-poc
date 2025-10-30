@@ -14,3 +14,6 @@
 - name: Import NTP configuration tasks
   ansible.builtin.import_tasks: ntp.yml
   tags: [ntp]
+
+- name: Create libvirt networks
+  ansible.builtin.include_tasks: create_networks.yml

@@ -1,0 +1,48 @@
+---
+- name: Create libvirt network definitions
+  ansible.builtin.template:
+    src: "{{ item }}.xml.j2"
+    dest: "/tmp/{{ item }}.xml"
+    mode: '0644'
+  loop:
+    - mgmt
+    - storage
+    - provider
+
+- name: Define libvirt networks
+  community.libvirt.virt_net:
+    command: define
+    name: "{{ item }}"
+    xml: "{{ lookup('file', '/tmp/' + item + '.xml') }}"
+  loop:
+    - mgmt
+    - storage
+    - provider
+
+- name: Start libvirt networks
+  community.libvirt.virt_net:
+    command: start
+    name: "{{ item }}"
+    state: active
+  loop:
+    - mgmt
+    - storage
+    - provider
+
+- name: Set libvirt networks to autostart
+  community.libvirt.virt_net:
+    name: "{{ item }}"
+    autostart: yes
+  loop:
+    - mgmt
+    - storage
+    - provider
+
+- name: Clean up temporary network XML files
+  ansible.builtin.file:
+    path: "/tmp/{{ item }}.xml"
+    state: absent
+  loop:
+    - mgmt
+    - storage
+    - provider

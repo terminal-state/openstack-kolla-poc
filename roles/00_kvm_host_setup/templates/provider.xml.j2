@@ -1,0 +1,13 @@
+<network>
+  <name>provider</name>
+  <bridge name='virbr-provider' stp='off' delay='0'/>
+  <ip address='192.168.102.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.102.200' end='192.168.102.254'/>
+      <host mac='52:54:00:f9:5f:b1' name='ctrl-01' ip='192.168.102.100'/>
+      <host mac='52:54:00:00:48:ad' name='cmp-01' ip='192.168.102.101'/>
+      <host mac='52:54:00:0d:f7:6b' name='cmp-02' ip='192.168.102.102'/>
+      <host mac='52:54:00:37:d6:81' name='cmp-03' ip='192.168.102.103'/>
+    </dhcp>
+  </ip>
+</network>
