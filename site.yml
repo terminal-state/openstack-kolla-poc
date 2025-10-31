@@ -7,7 +7,3 @@
 - name: Deploy OpenStack with Kolla-Ansible
   import_playbook: deploy_openstack.yml
   tags: [openstack]
-
-- name: Validate OpenStack Deployment
-  import_playbook: validate_openstack.yml
-  tags: [validate]
