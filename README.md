@@ -328,141 +328,210 @@ This is a **PoC environment** for testing and development. Before production:
 
 This project is provided as-is for educational and testing purposes.
 
-## Post-Deployment: Creating a Test Project
+## Post-Deployment: Complete Test Environment Setup
 
-After deployment completes, run these commands to set up a test project with networking:
+After successful deployment, run these commands from the KVM host to create a fully configured test environment.
 
-### 1. Create Test Project and User
+### 1. Access the Control Node and Setup Environment
 ```bash
 ssh -i /home/ansible/.ssh/id_ed25519 ansible@192.168.100.100
 source /home/ansible/kolla-venv/bin/activate
 source /etc/kolla/admin-openrc.sh
-
-# Create test project
-openstack project create --description "Test Project" test-project
-
-# Create test user
-openstack user create --project test-project --password testpass test-user
-
-# Assign member role
-openstack role add --project test-project --user test-user member
 ```
 
-### 2. Create Flavor
+### 2. Upload Public Image (AlmaLinux 9)
 ```bash
-# Create small flavor: 2 vCPU, 4GB RAM, 20GB disk
-openstack flavor create --vcpus 2 --ram 4096 --disk 20 test-flavor
+# Download AlmaLinux 9 cloud image
+cd ~
+wget https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2
+
+# Upload as public image
+openstack image create \
+  --disk-format qcow2 \
+  --container-format bare \
+  --public \
+  --file AlmaLinux-9-GenericCloud-latest.x86_64.qcow2 \
+  almalinux-9
+
+# Verify image
+openstack image list
 ```
 
-### 3. Create Networks
+### 3. Create Public Flavor
 ```bash
-# Create private network
-openstack network create --project test-project private-network
-openstack subnet create --project test-project \
-  --network private-network \
-  --subnet-range 10.1.0.0/24 \
-  --dns-nameserver 8.8.8.8 \
-  private-subnet
+# Create flavor: 2 vCPU, 2GB RAM, 20GB disk
+openstack flavor create \
+  --vcpus 2 \
+  --ram 2048 \
+  --disk 20 \
+  --public \
+  test-flavor
 
-# Create external/public network (admin only)
-openstack network create --external \
+# Verify flavor
+openstack flavor list
+```
+
+### 4. Create External/Public Network
+```bash
+# Create external network on provider network (192.168.102.0/24)
+openstack network create \
+  --external \
   --provider-physical-network physnet1 \
   --provider-network-type flat \
   public-network
 
-openstack subnet create --network public-network \
+# Create subnet with floating IP pool
+openstack subnet create \
+  --network public-network \
   --subnet-range 192.168.102.0/24 \
   --allocation-pool start=192.168.102.150,end=192.168.102.199 \
   --gateway 192.168.102.1 \
   --dns-nameserver 8.8.8.8 \
   --no-dhcp \
   public-subnet
+
+# Verify networks
+openstack network list
 ```
 
-### 4. Create Router
+### 5. Create Test Project
 ```bash
-# Create router in test project
-openstack router create --project test-project test-router
+# Create project
+openstack project create \
+  --description "Test Project for Instance Deployment" \
+  test-project
 
-# Connect router to private network
+# Create test user
+openstack user create \
+  --project test-project \
+  --password testpass123 \
+  test-user
+
+# Assign member role
+openstack role add \
+  --project test-project \
+  --user test-user \
+  member
+```
+
+### 6. Create Private Network in Test Project
+```bash
+# Create private network
+openstack network create \
+  --project test-project \
+  private-network
+
+# Create private subnet
+openstack subnet create \
+  --project test-project \
+  --network private-network \
+  --subnet-range 10.1.0.0/24 \
+  --dns-nameserver 8.8.8.8 \
+  private-subnet
+```
+
+### 7. Create Router and Connect Networks
+```bash
+# Create router
+openstack router create \
+  --project test-project \
+  test-router
+
+# Connect router to private subnet
 openstack router add subnet test-router private-subnet
 
 # Set external gateway
-openstack router set --external-gateway public-network test-router
+openstack router set \
+  --external-gateway public-network \
+  test-router
+
+# Verify router
+openstack router show test-router
 ```
 
-### 5. Configure Security Group
+### 8. Create SSH Keypair
+```bash
+# Generate SSH key for test project
+ssh-keygen -t ed25519 -f ~/.ssh/test-key -N "" -C "test-project-key"
+
+# Import to OpenStack
+openstack keypair create \
+  --project test-project \
+  --public-key ~/.ssh/test-key.pub \
+  test-key
+
+# Verify keypair
+openstack keypair list --project test-project
+```
+
+### 9. Configure Security Group for SSH Access
 ```bash
 # Get default security group ID for test project
 PROJECT_ID=$(openstack project show test-project -f value -c id)
 SG_ID=$(openstack security group list --project $PROJECT_ID -f value -c ID)
 
 # Allow SSH from anywhere
-openstack security group rule create --project test-project \
-  --protocol tcp --dst-port 22 --remote-ip 0.0.0.0/0 $SG_ID
+openstack security group rule create \
+  --project test-project \
+  --protocol tcp \
+  --dst-port 22 \
+  --remote-ip 0.0.0.0/0 \
+  --ingress \
+  $SG_ID
 
 # Allow ICMP (ping)
-openstack security group rule create --project test-project \
-  --protocol icmp $SG_ID
+openstack security group rule create \
+  --project test-project \
+  --protocol icmp \
+  --ingress \
+  $SG_ID
 
 # Allow all egress traffic (usually default, but ensure it exists)
-openstack security group rule create --project test-project \
-  --egress --protocol any $SG_ID
+openstack security group rule create \
+  --project test-project \
+  --protocol any \
+  --egress \
+  $SG_ID
+
+# Verify security group rules
+openstack security group rule list $SG_ID
 ```
 
-### 6. Upload Test Image
+### 10. Verify Complete Setup
 ```bash
-# Download CentOS Stream 9 cloud image
-wget https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2
-
-# Upload to Glance in test project
-openstack image create --project test-project \
-  --disk-format qcow2 \
-  --container-format bare \
-  --public \
-  --file CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2 \
-  centos-stream-9
-```
-
-### 7. Create SSH Keypair
-```bash
-# Generate keypair for test project
-ssh-keygen -t ed25519 -f ~/.ssh/test-key -N ""
-
-# Import to OpenStack
-openstack keypair create --project test-project \
-  --public-key ~/.ssh/test-key.pub \
-  test-key
+echo "=== DEPLOYMENT SUMMARY ==="
+echo ""
+echo "Images:"
+openstack image list
+echo ""
+echo "Flavors:"
+openstack flavor list
+echo ""
+echo "Networks:"
+openstack network list
+echo ""
+echo "Projects:"
+openstack project list
+echo ""
+echo "Test Project Resources:"
+openstack network list --project test-project
+openstack router list --project test-project
+openstack keypair list --project test-project
 ```
 
 ## Launching Your First Instance
 
-Now you can launch an instance as the test user:
+Now everything is ready! You can launch an instance in just a few commands:
 
-### Via CLI
+### As Admin (Quick Test)
 ```bash
-# Switch to test user credentials
-cat > /tmp/test-openrc.sh << ENVEOF
-export OS_PROJECT_DOMAIN_NAME=Default
-export OS_USER_DOMAIN_NAME=Default
-export OS_PROJECT_NAME=test-project
-export OS_USERNAME=test-user
-export OS_PASSWORD=testpass
-export OS_AUTH_URL=http://192.168.100.200:5000/v3
-export OS_IDENTITY_API_VERSION=3
-export OS_REGION_NAME=RegionOne
-export OS_INTERFACE=internal
-ENVEOF
-
-source /tmp/test-openrc.sh
-
 # Get network ID
 NETWORK_ID=$(openstack network list --name private-network -f value -c ID)
 
 # Launch instance
 openstack server create \
   --flavor test-flavor \
-  --image centos-stream-9 \
+  --image almalinux-9 \
   --network $NETWORK_ID \
   --key-name test-key \
   --security-group default \
@@ -475,8 +544,52 @@ openstack server list
 FLOATING_IP=$(openstack floating ip create public-network -f value -c floating_ip_address)
 openstack server add floating ip test-instance-01 $FLOATING_IP
 
-echo "Instance accessible at: $FLOATING_IP"
+echo "Instance ready! SSH with: ssh -i ~/.ssh/test-key almalinux@$FLOATING_IP"
 ```
+
+### As Test User (via Horizon)
+
+1. Login to Horizon: **http://192.168.100.200**
+   - Username: `test-user`
+   - Password: `testpass123`
+   - Domain: `Default`
+
+2. Navigate to **Project > Compute > Instances**
+
+3. Click **Launch Instance**:
+   - **Details**: Name: `my-first-instance`
+   - **Source**: Select `almalinux-9` image
+   - **Flavor**: Select `test-flavor`
+   - **Networks**: Select `private-network`
+   - **Key Pair**: Select `test-key`
+   - **Security Groups**: Ensure `default` is selected
+
+4. Click **Launch Instance**
+
+5. Once ACTIVE, go to **Project > Network > Floating IPs**
+
+6. Click **Allocate IP to Project**, select `public-network`
+
+7. Click **Associate** next to the new floating IP
+
+8. Select your instance and click **Associate**
+
+### Access Your Instance
+
+From the KVM host (arrakis):
+```bash
+# SSH to instance using floating IP
+ssh -i /home/ansible/.ssh/test-key almalinux@<floating-ip>
+
+# If using AlmaLinux/Rocky cloud image, default user is 'almalinux'
+# If using Ubuntu cloud image, default user is 'ubuntu'
+```
+
+Your instance will have:
+- **Private IP**: 10.1.0.x (on private-network)
+- **Floating IP**: 192.168.102.x (accessible from KVM host)
+- **Internet Access**: Via router NAT
+- **SSH Access**: Enabled via security group rules
 
 ### Via Horizon Dashboard
 
